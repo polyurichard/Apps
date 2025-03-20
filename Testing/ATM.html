@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATM Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#5D5CDE',
+                        atm: {
+                            body: '#3B4252',
+                            screen: '#D8DEE9',
+                            darkScreen: '#2E3440',
+                            keypad: '#4C566A',
+                            slot: '#2E3440'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .draggable {
+            cursor: grab;
+            user-select: none;
+            touch-action: none;
+        }
+        .draggable:active {
+            cursor: grabbing;
+        }
+        .drop-zone {
+            border: 2px dashed #5D5CDE;
+        }
+        .keypad-btn {
+            transition: all 0.1s;
+        }
+        .keypad-btn:active {
+            transform: scale(0.95);
+            background-color: #4C566A;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .blink {
+            animation: blink 1s linear infinite;
+        }
+    </style>
+</head>
+<body class="transition-colors duration-300 bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-4 max-w-4xl">
+        <div class="flex justify-between items-center mb-4">
+            <h1 class="text-2xl font-bold text-center flex-grow">ATM Simulator</h1>
+            <button id="restart-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 rounded transition-colors duration-300">
+                Restart Simulation
+            </button>
+        </div>
+        
+        <div class="relative flex flex-col md:flex-row gap-6">
+            <!-- Bank Card (Left) -->
+            <div class="w-full md:w-1/5">
+                <div id="card-container" class="flex justify-center mb-4">
+                    <div id="atm-card" class="w-40 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg p-2 relative draggable">
+                        <div class="absolute top-2 left-2 text-white font-bold text-xs">BANK CARD</div>
+                        <div class="absolute bottom-8 left-2 text-white font-mono text-xs">1234 5678 9012 3456</div>
+                        <div class="absolute bottom-2 left-2 text-white font-mono text-xs">01/25</div>
+                        <div class="absolute bottom-2 right-2 text-white font-bold text-xs">VISA</div>
+                        <div class="absolute top-2 right-2 w-6 h-6 bg-yellow-400 rounded-full grid grid-cols-2 grid-rows-2 gap-0.5 p-0.5">
+                            <div class="bg-yellow-600 rounded-full"></div>
+                            <div class="bg-yellow-600 rounded-full"></div>
+                            <div class="bg-yellow-600 rounded-full"></div>
+                            <div class="bg-yellow-600 rounded-full"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-white dark:bg-gray-800 p-3 rounded-lg shadow mb-4">
+                    <h3 class="font-bold mb-2 text-sm">Account Info (For Testing)</h3>
+                    <div class="text-xs space-y-1">
+                        <div>PIN: <span class="font-mono">1234</span></div>
+                        <div>Balance: <span id="account-balance-display" class="font-mono">$1,000.00</span></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ATM Machine -->
+            <div class="w-full md:w-2/5 bg-atm-body rounded-lg p-3 shadow-lg">
+                <!-- ATM Screen -->
+                <div id="atm-screen" class="bg-atm-screen dark:bg-atm-darkScreen h-40 rounded-md mb-4 p-3 relative overflow-hidden">
+                    <!-- IDLE State -->
+                    <div id="state-idle" class="absolute inset-0 p-4 flex flex-col justify-center items-center">
+                        <div class="text-xl font-bold text-center mb-2">Welcome</div>
+                        <div class="text-base text-center">Please insert your card</div>
+                        <div class="mt-2 text-center text-xs opacity-75">Drag your card to the card slot below</div>
+                    </div>
+                    
+                    <!-- WAITING_PIN State -->
+                    <div id="state-waiting-pin" class="absolute inset-0 p-4 flex-col justify-start items-center hidden">
+                        <div class="text-lg font-bold text-center mb-4">Enter PIN</div>
+                        <div class="flex justify-center mb-2">
+                            <div id="pin-display" class="flex space-x-2">
+                                <div class="w-6 h-6 border-2 border-gray-500 rounded-md flex items-center justify-center text-xs pin-digit"></div>
+                                <div class="w-6 h-6 border-2 border-gray-500 rounded-md flex items-center justify-center text-xs pin-digit"></div>
+                                <div class="w-6 h-6 border-2 border-gray-500 rounded-md flex items-center justify-center text-xs pin-digit"></div>
+                                <div class="w-6 h-6 border-2 border-gray-500 rounded-md flex items-center justify-center text-xs pin-digit"></div>
+                            </div>
+                        </div>
+                        <div class="text-center text-xs mt-1 text-red-500 hidden" id="pin-error-msg">Incorrect PIN. Please try again.</div>
+                    </div>
+                    
+                    <!-- MENU State -->
+                    <div id="state-menu" class="absolute inset-0 p-3 flex-col justify-between hidden">
+                        <div class="text-lg font-bold text-center mb-3">Select Transaction</div>
+                        <div class="grid grid-cols-1 gap-2">
+                            <button id="withdraw-btn" class="bg-primary text-white py-1 rounded-lg shadow hover:bg-opacity-90 active:transform active:scale-95 transition-all text-sm">Withdraw Cash</button>
+                            <button id="balance-btn" class="bg-primary text-white py-1 rounded-lg shadow hover:bg-opacity-90 active:transform active:scale-95 transition-all text-sm">Check Balance</button>
+                            <button id="exit-btn" class="bg-red-500 text-white py-1 rounded-lg shadow hover:bg-opacity-90 active:transform active:scale-95 transition-all text-sm">Exit</button>
+                        </div>
+                    </div>
+                    
+                    <!-- WITHDRAWING State -->
+                    <div id="state-withdrawing" class="absolute inset-0 p-3 flex-col justify-between hidden">
+                        <div class="text-lg font-bold text-center mb-2">Select Amount</div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button class="amount-btn bg-primary text-white py-1 rounded-lg shadow hover:bg-opacity-90 active:transform active:scale-95 transition-all text-sm" data-amount="20">$20</button>
+                            <button class="amount-btn bg-primary text-white py-1 rounded-lg shadow hover:bg-opacity-90 active:transform active:scale-95 transition-all text-sm" data-amount="50">$50</button>
+                            <button class="amount-btn bg-primary text-white py-1 rounded-lg shadow hover:bg-opacity-90 active:transform active:scale-95 transition-all text-sm" data-amount="100">$100</button>
+                            <button class="amount-btn bg-primary text-white py-1 rounded-lg shadow hover:bg-opacity-90 active:transform active:scale-95 transition-all text-sm" data-amount="200">$200</button>
+                        </div>
+                        <button id="back-to-menu-btn" class="bg-gray-500 text-white py-1 rounded-lg shadow hover:bg-opacity-90 active:transform active:scale-95 transition-all mt-2 text-sm">Back</button>
+                    </div>
+                    
+                    <!-- DISPENSING State -->
+                    <div id="state-dispensing" class="absolute inset-0 p-3 flex-col justify-center items-center hidden">
+                        <div class="text-lg font-bold text-center mb-2">Processing Transaction</div>
+                        <div class="flex justify-center">
+                            <div class="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                        </div>
+                        <div class="text-sm text-center mt-2">Please wait...</div>
+                    </div>
+                    
+                    <!-- TRANSACTION_COMPLETE State -->
+                    <div id="state-complete" class="absolute inset-0 p-3 flex-col justify-center items-center hidden">
+                        <div class="text-lg font-bold text-center mb-2 text-green-600 dark:text-green-400">Transaction Complete</div>
+                        <div class="text-sm text-center" id="transaction-message">Please take your cash</div>
+                        <div id="another-transaction-container" class="text-center mt-2">
+                            <button id="another-transaction-btn" class="bg-primary text-white py-1 px-3 rounded-lg shadow hover:bg-opacity-90 active:transform active:scale-95 transition-all text-sm">Another Transaction</button>
+                        </div>
+                    </div>
+                    
+                    <!-- ERROR State -->
+                    <div id="state-error" class="absolute inset-0 p-3 flex-col justify-center items-center hidden">
+                        <div class="text-lg font-bold text-center mb-2 text-red-600 dark:text-red-400">Error</div>
+                        <div class="text-sm text-center mb-2" id="error-message">Transaction could not be processed</div>
+                        <button id="try-again-btn" class="bg-primary text-white py-1 px-3 rounded-lg shadow hover:bg-opacity-90 active:transform active:scale-95 transition-all text-sm">Try Again</button>
+                    </div>
+                </div>
+                
+                <!-- ATM Interface -->
+                <div class="flex flex-col md:flex-row gap-3">
+                    <!-- Card Slot and Cash Dispenser -->
+                    <div class="w-full md:w-1/2 flex flex-col gap-2">
+                        <div id="card-slot" class="h-10 bg-atm-slot rounded-md flex items-center justify-center text-white drop-zone">
+                            <div class="text-center text-xs">Card Slot</div>
+                        </div>
+                        <div id="cash-dispenser" class="h-16 bg-atm-slot rounded-md flex items-center justify-center text-white relative">
+                            <div class="text-center text-xs">Cash Dispenser</div>
+                            <div id="cash" class="absolute hidden w-3/4 h-12 bg-green-500 rounded-md flex items-center justify-center text-white font-bold cursor-pointer">
+                                <div class="absolute inset-0 flex items-center justify-center">
+                                    <span id="cash-amount">$0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Keypad -->
+                    <div class="w-full md:w-1/2">
+                        <div class="bg-atm-keypad rounded-md p-2">
+                            <div class="grid grid-cols-3 gap-1">
+                                <button class="keypad-btn bg-gray-200 dark:bg-gray-700 h-8 rounded-md flex items-center justify-center font-bold text-sm" data-key="1">1</button>
+                                <button class="keypad-btn bg-gray-200 dark:bg-gray-700 h-8 rounded-md flex items-center justify-center font-bold text-sm" data-key="2">2</button>
+                                <button class="keypad-btn bg-gray-200 dark:bg-gray-700 h-8 rounded-md flex items-center justify-center font-bold text-sm" data-key="3">3</button>
+                                <button class="keypad-btn bg-gray-200 dark:bg-gray-700 h-8 rounded-md flex items-center justify-center font-bold text-sm" data-key="4">4</button>
+                                <button class="keypad-btn bg-gray-200 dark:bg-gray-700 h-8 rounded-md flex items-center justify-center font-bold text-sm" data-key="5">5</button>
+                                <button class="keypad-btn bg-gray-200 dark:bg-gray-700 h-8 rounded-md flex items-center justify-center font-bold text-sm" data-key="6">6</button>
+                                <button class="keypad-btn bg-gray-200 dark:bg-gray-700 h-8 rounded-md flex items-center justify-center font-bold text-sm" data-key="7">7</button>
+                                <button class="keypad-btn bg-gray-200 dark:bg-gray-700 h-8 rounded-md flex items-center justify-center font-bold text-sm" data-key="8">8</button>
+                                <button class="keypad-btn bg-gray-200 dark:bg-gray-700 h-8 rounded-md flex items-center justify-center font-bold text-sm" data-key="9">9</button>
+                                <button class="keypad-btn bg-red-500 text-white h-8 rounded-md flex items-center justify-center font-bold text-xs" data-key="clear">Clear</button>
+                                <button class="keypad-btn bg-gray-200 dark:bg-gray-700 h-8 rounded-md flex items-center justify-center font-bold text-sm" data-key="0">0</button>
+                                <button class="keypad-btn bg-green-500 text-white h-8 rounded-md flex items-center justify-center font-bold text-xs" data-key="enter">Enter</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- State Transition Diagram (Collapsible) -->
+        <div class="mt-4">
+            <div class="flex justify-between items-center cursor-pointer mb-3" id="diagram-header" aria-expanded="false">
+                <h2 class="text-xl font-bold">State Transition Diagram</h2>
+                <button class="text-primary hover:text-opacity-80 transition-colors p-1 rounded-md flex items-center" aria-label="Toggle state diagram">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transform transition-transform duration-300" id="diagram-chevron" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
+            </div>
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow overflow-auto hidden transition-all duration-300 ease-in-out" id="diagram-container">
+                <svg id="state-diagram" class="w-full" height="400" viewBox="0 0 800 400" style="min-width: 700px;">
+                    <!-- States -->
+                    <circle id="start-state" cx="50" cy="150" r="10" class="fill-gray-300 dark:fill-gray-600" />
+                    
+                    <circle id="idle-state" cx="150" cy="150" r="40" class="fill-green-100 dark:fill-green-900 stroke-green-600 dark:stroke-green-400" stroke-width="4" />
+                    <text x="150" y="155" text-anchor="middle" class="text-[0.56rem] fill-current font-bold">IDLE</text>
+                    
+                    <circle id="waiting-pin-state" cx="300" cy="150" r="40" class="fill-gray-100 dark:fill-gray-700 stroke-gray-400" stroke-width="2" />
+                    <text x="300" y="145" text-anchor="middle" class="text-[0.56rem] fill-current font-bold">WAITING</text>
+                    <text x="300" y="160" text-anchor="middle" class="text-[0.56rem] fill-current font-bold">PIN</text>
+                    
+                    <circle id="menu-state" cx="450" cy="150" r="40" class="fill-gray-100 dark:fill-gray-700 stroke-gray-400" stroke-width="2" />
+                    <text x="450" y="145" text-anchor="middle" class="text-[0.56rem] fill-current font-bold">SHOWING</text>
+                    <text x="450" y="160" text-anchor="middle" class="text-[0.56rem] fill-current font-bold">MENU</text>
+                    
+                    <circle id="withdrawing-state" cx="450" cy="280" r="40" class="fill-gray-100 dark:fill-gray-700 stroke-gray-400" stroke-width="2" />
+                    <text x="450" y="280" text-anchor="middle" class="text-[0.56rem] fill-current font-bold">WITHDRAWING</text>
+                    
+                    <circle id="dispensing-state" cx="630" cy="280" r="40" class="fill-gray-100 dark:fill-gray-700 stroke-gray-400" stroke-width="2" />
+                    <text x="630" y="280" text-anchor="middle" class="text-[0.56rem] fill-current font-bold">DISPENSING</text>
+                    
+                    <circle id="complete-state" cx="750" cy="150" r="40" class="fill-gray-100 dark:fill-gray-700 stroke-gray-400" stroke-width="2" />
+                    <text x="750" y="145" text-anchor="middle" class="text-[0.56rem] fill-current font-bold">TRANSACTION</text>
+                    <text x="750" y="160" text-anchor="middle" class="text-[0.56rem] fill-current font-bold">COMPLETE</text>
+                    
+                    <circle id="error-state" cx="300" cy="320" r="40" class="fill-gray-100 dark:fill-gray-700 stroke-gray-400" stroke-width="2" />
+                    <text x="300" y="325" text-anchor="middle" class="text-[0.56rem] fill-current font-bold">ERROR</text>
+                    
+                    <!-- Transitions -->
+                    <line x1="60" y1="150" x2="100" y2="150" stroke="currentColor" stroke-width="2" />
+                    <polygon points="95,145 105,150 95,155" class="fill-current" />
+                    
+                    <line id="to-waiting-pin" x1="190" y1="150" x2="250" y2="150" stroke="currentColor" stroke-width="2" />
+                    <polygon id="to-waiting-pin-arrow" points="245,145 255,150 245,155" class="fill-current" />
+                    <text x="220" y="140" text-anchor="middle" class="text-xs fill-current">Insert Card</text>
+                    
+                    <line id="to-menu" x1="340" y1="150" x2="400" y2="150" stroke="currentColor" stroke-width="2" />
+                    <polygon id="to-menu-arrow" points="395,145 405,150 395,155" class="fill-current" />
+                    <text x="370" y="140" text-anchor="middle" class="text-xs fill-current">PIN OK</text>
+                    
+                    <path id="to-withdrawing" d="M450,190 L450,240" fill="none" stroke="currentColor" stroke-width="2" />
+                    <polygon id="to-withdrawing-arrow" points="445,235 450,245 455,235" class="fill-current" />
+                    <text x="470" y="220" text-anchor="middle" class="text-xs fill-current">Select Withdraw</text>
+                    
+                    <path id="to-dispensing" d="M490,280 C540,280 570,280 590,280" fill="none" stroke="currentColor" stroke-width="2" />
+                    <polygon id="to-dispensing-arrow" points="585,275 595,280 585,285" class="fill-current" />
+                    <text x="540" y="270" text-anchor="middle" class="text-xs fill-current">Select Amount</text>
+                    
+                    <path id="to-complete" d="M670,280 C700,280 730,230 730,190" fill="none" stroke="currentColor" stroke-width="2" />
+                    <polygon id="to-complete-arrow" points="725,195 735,185 735,200" class="fill-current" />
+                    <text x="700" y="240" text-anchor="middle" class="text-xs fill-current">Cash Dispensed</text>
+                    
+                    <!-- Menu to Idle transition (Exit button) -->
+                    <path id="menu-to-idle" d="M430,110 C420,80 300,60 170,110" fill="none" stroke="currentColor" stroke-width="2" />
+                    <polygon id="menu-to-idle-arrow" points="175,105 165,115 165,100" class="fill-current" />
+                    <text x="300" y="80" text-anchor="middle" class="text-xs fill-current">Exit</text>
+                    
+                    <!-- Two-way arrows between MENU and TRANSACTION COMPLETE -->
+                    <path id="menu-to-complete" d="M490,150 C580,150 650,150 700,150" fill="none" stroke="currentColor" stroke-width="2" />
+                    <polygon id="menu-to-complete-arrow" points="695,145 705,150 695,155" class="fill-current" />
+                    <text x="600" y="140" text-anchor="middle" class="text-xs fill-current">Check Balance</text>
+                    
+                    <path id="complete-to-menu" d="M710,160 C650,160 580,160 500,160" fill="none" stroke="currentColor" stroke-width="2" />
+                    <polygon id="complete-to-menu-arrow" points="505,165 495,160 505,155" class="fill-current" />
+                    <text x="600" y="175" text-anchor="middle" class="text-xs fill-current">Another Transaction</text>
+                    
+                    <path id="pin-to-error" d="M300,190 L300,280" fill="none" stroke="currentColor" stroke-width="2" />
+                    <polygon id="pin-to-error-arrow" points="295,275 300,285 305,275" class="fill-current" />
+                    <text x="345" y="235" text-anchor="middle" class="text-xs fill-current">Wrong PIN</text>
+                    
+                    <path id="error-to-waiting-pin" d="M300,280 L300,190" fill="none" stroke="currentColor" stroke-width="2" />
+                    <polygon id="error-to-waiting-pin-arrow" points="295,275 300,285 305,275" class="fill-current" />
+                    <text x="255" y="235" text-anchor="middle" class="text-xs fill-current">Try Again</text>
+                    
+                    <path id="complete-to-idle" d="M750,110 C750,50 450,30 200,70 C170,75 160,110 160,110" fill="none" stroke="currentColor" stroke-width="2" />
+                    <polygon id="complete-to-idle-arrow" points="165,105 155,115 155,100" class="fill-current" />
+                    <text x="450" y="45" text-anchor="middle" class="text-xs fill-current">Return Card</text>
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check for dark mode preference
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+        
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+            if (event.matches) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        });
+        
+        // State transition diagram toggle functionality
+        document.addEventListener('DOMContentLoaded', () => {
+            const diagramHeader = document.getElementById('diagram-header');
+            const diagramContainer = document.getElementById('diagram-container');
+            const diagramChevron = document.getElementById('diagram-chevron');
+            
+            diagramHeader.addEventListener('click', () => {
+                const isExpanded = diagramHeader.getAttribute('aria-expanded') === 'true';
+                
+                // Toggle container visibility
+                if (isExpanded) {
+                    diagramContainer.classList.add('hidden');
+                    diagramChevron.classList.remove('rotate-180');
+                } else {
+                    diagramContainer.classList.remove('hidden');
+                    diagramChevron.classList.add('rotate-180');
+                }
+                
+                // Update expanded state
+                diagramHeader.setAttribute('aria-expanded', !isExpanded);
+            });
+        });
+        
+        // ATM Simulator Logic
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM Elements
+            const atmCard = document.getElementById('atm-card');
+            const cardSlot = document.getElementById('card-slot');
+            const cashElement = document.getElementById('cash');
+            const cashAmount = document.getElementById('cash-amount');
+            const restartBtn = document.getElementById('restart-btn');
+            const keypadBtns = document.querySelectorAll('.keypad-btn');
+            const pinDigits = document.querySelectorAll('.pin-digit');
+            const withdrawBtn = document.getElementById('withdraw-btn');
+            const balanceBtn = document.getElementById('balance-btn');
+            const exitBtn = document.getElementById('exit-btn');
+            const amountBtns = document.querySelectorAll('.amount-btn');
+            const backToMenuBtn = document.getElementById('back-to-menu-btn');
+            const anotherTransactionBtn = document.getElementById('another-transaction-btn');
+            const tryAgainBtn = document.getElementById('try-again-btn');
+            const transactionMessage = document.getElementById('transaction-message');
+            const errorMessage = document.getElementById('error-message');
+            const pinErrorMsg = document.getElementById('pin-error-msg');
+            
+            // State elements
+            const stateIdle = document.getElementById('state-idle');
+            const stateWaitingPin = document.getElementById('state-waiting-pin');
+            const stateMenu = document.getElementById('state-menu');
+            const stateWithdrawing = document.getElementById('state-withdrawing');
+            const stateDispensing = document.getElementById('state-dispensing');
+            const stateComplete = document.getElementById('state-complete');
+            const stateError = document.getElementById('state-error');
+            
+            // State diagram elements
+            const idleState = document.getElementById('idle-state');
+            const waitingPinState = document.getElementById('waiting-pin-state');
+            const menuState = document.getElementById('menu-state');
+            const withdrawingState = document.getElementById('withdrawing-state');
+            const dispensingState = document.getElementById('dispensing-state');
+            const completeState = document.getElementById('complete-state');
+            const errorState = document.getElementById('error-state');
+            
+            // Constants
+            const CORRECT_PIN = '1234';
+            let ACCOUNT_BALANCE = 1000;
+            
+            // Variables
+            let currentState = 'IDLE';
+            let enteredPin = '';
+            let selectedAmount = 0;
+            let isDraggingCard = false;
+            let cardOffsetX = 0;
+            let cardOffsetY = 0;
+            let cardOriginalPosition = null;
+            
+            // Initialize
+            function initializeATM() {
+                currentState = 'IDLE';
+                enteredPin = '';
+                selectedAmount = 0;
+                
+                // Reset UI
+                resetPinDisplay();
+                pinErrorMsg.classList.add('hidden');
+                resetCardPosition();
+                hideCash();
+                updateBalanceDisplay();
+                
+                // Show correct state
+                showState('IDLE');
+                updateStateDiagram();
+            }
+            
+            // Update account balance display
+            function updateBalanceDisplay() {
+                const balanceDisplay = document.getElementById('account-balance-display');
+                balanceDisplay.textContent = `$${ACCOUNT_BALANCE.toFixed(2)}`;
+            }
+            
+            // State Management
+            function showState(state) {
+                // Hide all states
+                stateIdle.classList.add('hidden');
+                stateWaitingPin.classList.add('hidden');
+                stateMenu.classList.add('hidden');
+                stateWithdrawing.classList.add('hidden');
+                stateDispensing.classList.add('hidden');
+                stateComplete.classList.add('hidden');
+                stateError.classList.add('hidden');
+                
+                stateIdle.classList.remove('flex');
+                stateWaitingPin.classList.remove('flex');
+                stateMenu.classList.remove('flex');
+                stateWithdrawing.classList.remove('flex');
+                stateDispensing.classList.remove('flex');
+                stateComplete.classList.remove('flex');
+                stateError.classList.remove('flex');
+                
+                // Show current state
+                switch(state) {
+                    case 'IDLE':
+                        stateIdle.classList.remove('hidden');
+                        stateIdle.classList.add('flex');
+                        break;
+                    case 'WAITING_PIN':
+                        stateWaitingPin.classList.remove('hidden');
+                        stateWaitingPin.classList.add('flex');
+                        break;
+                    case 'MENU':
+                        stateMenu.classList.remove('hidden');
+                        stateMenu.classList.add('flex');
+                        break;
+                    case 'WITHDRAWING':
+                        stateWithdrawing.classList.remove('hidden');
+                        stateWithdrawing.classList.add('flex');
+                        break;
+                    case 'DISPENSING':
+                        stateDispensing.classList.remove('hidden');
+                        stateDispensing.classList.add('flex');
+                        break;
+                    case 'TRANSACTION_COMPLETE':
+                        stateComplete.classList.remove('hidden');
+                        stateComplete.classList.add('flex');
+                        break;
+                    case 'ERROR':
+                        stateError.classList.remove('hidden');
+                        stateError.classList.add('flex');
+                        break;
+                }
+                
+                currentState = state;
+                updateStateDiagram();
+            }
+            
+            function resetPinDisplay() {
+                enteredPin = '';
+                pinDigits.forEach(digit => {
+                    digit.textContent = '';
+                });
+            }
+            
+            function updatePinDisplay() {
+                pinDigits.forEach((digit, index) => {
+                    if (index < enteredPin.length) {
+                        digit.textContent = '*';
+                    } else {
+                        digit.textContent = '';
+                    }
+                });
+            }
+            
+            function showCash(amount) {
+                cashElement.classList.remove('hidden');
+                cashAmount.textContent = `$${amount}`;
+                cashElement.classList.add('blink');
+            }
+            
+            function hideCash() {
+                cashElement.classList.add('hidden');
+            }
+            
+            function hideCard() {
+                atmCard.style.display = 'none';
+            }
+            
+            function showCard() {
+                atmCard.style.display = 'block';
+                atmCard.style.opacity = '1';
+                atmCard.style.transform = 'none';
+                atmCard.style.position = 'relative';
+                atmCard.style.top = '0px';
+                atmCard.style.left = '0px';
+                atmCard.style.zIndex = 'auto';
+                atmCard.style.transition = 'none';
+            }
+            
+            function resetCardPosition() {
+                showCard();
+            }
+            
+            function updateStateDiagram() {
+                // Reset all states
+                idleState.setAttribute('class', 'fill-gray-100 dark:fill-gray-700 stroke-gray-400');
+                waitingPinState.setAttribute('class', 'fill-gray-100 dark:fill-gray-700 stroke-gray-400');
+                menuState.setAttribute('class', 'fill-gray-100 dark:fill-gray-700 stroke-gray-400');
+                withdrawingState.setAttribute('class', 'fill-gray-100 dark:fill-gray-700 stroke-gray-400');
+                dispensingState.setAttribute('class', 'fill-gray-100 dark:fill-gray-700 stroke-gray-400');
+                completeState.setAttribute('class', 'fill-gray-100 dark:fill-gray-700 stroke-gray-400');
+                errorState.setAttribute('class', 'fill-gray-100 dark:fill-gray-700 stroke-gray-400');
+                
+                // Reset transition arrows
+                document.getElementById('to-waiting-pin-arrow').classList.remove('fill-green-600', 'dark:fill-green-400');
+                document.getElementById('to-menu-arrow').classList.remove('fill-green-600', 'dark:fill-green-400');
+                document.getElementById('to-withdrawing-arrow').classList.remove('fill-green-600', 'dark:fill-green-400');
+                document.getElementById('to-dispensing-arrow').classList.remove('fill-green-600', 'dark:fill-green-400');
+                document.getElementById('to-complete-arrow').classList.remove('fill-green-600', 'dark:fill-green-400');
+                document.getElementById('menu-to-complete-arrow').classList.remove('fill-green-600', 'dark:fill-green-400');
+                document.getElementById('complete-to-menu-arrow').classList.remove('fill-green-600', 'dark:fill-green-400');
+                document.getElementById('complete-to-idle-arrow').classList.remove('fill-green-600', 'dark:fill-green-400');
+                document.getElementById('pin-to-error-arrow').classList.remove('fill-red-600', 'dark:fill-red-400');
+                document.getElementById('error-to-waiting-pin-arrow').classList.remove('fill-green-600', 'dark:fill-green-400');
+                
+                // Highlight current state
+                switch(currentState) {
+                    case 'IDLE':
+                        idleState.setAttribute('class', 'fill-green-100 dark:fill-green-900 stroke-green-600 dark:stroke-green-400');
+                        break;
+                    case 'WAITING_PIN':
+                        waitingPinState.setAttribute('class', 'fill-blue-100 dark:fill-blue-900 stroke-blue-600 dark:stroke-blue-400');
+                        document.getElementById('to-waiting-pin-arrow').classList.add('fill-green-600', 'dark:fill-green-400');
+                        break;
+                    case 'MENU':
+                        menuState.setAttribute('class', 'fill-blue-100 dark:fill-blue-900 stroke-blue-600 dark:stroke-blue-400');
+                        document.getElementById('to-menu-arrow').classList.add('fill-green-600', 'dark:fill-green-400');
+                        break;
+                    case 'WITHDRAWING':
+                        withdrawingState.setAttribute('class', 'fill-blue-100 dark:fill-blue-900 stroke-blue-600 dark:stroke-blue-400');
+                        document.getElementById('to-withdrawing-arrow').classList.add('fill-green-600', 'dark:fill-green-400');
+                        break;
+                    case 'DISPENSING':
+                        dispensingState.setAttribute('class', 'fill-blue-100 dark:fill-blue-900 stroke-blue-600 dark:stroke-blue-400');
+                        document.getElementById('to-dispensing-arrow').classList.add('fill-green-600', 'dark:fill-green-400');
+                        break;
+                    case 'TRANSACTION_COMPLETE':
+                        completeState.setAttribute('class', 'fill-blue-100 dark:fill-blue-900 stroke-blue-600 dark:stroke-blue-400');
+                        
+                        // Check if this was from a balance check or a cash withdrawal
+                        if (cashElement.classList.contains('hidden')) {
+                            // Balance check - highlight the direct path from menu
+                            document.getElementById('menu-to-complete-arrow').classList.add('fill-green-600', 'dark:fill-green-400');
+                        } else {
+                            // Cash withdrawal - highlight the path from dispensing
+                            document.getElementById('to-complete-arrow').classList.add('fill-green-600', 'dark:fill-green-400');
+                        }
+                        break;
+                    case 'ERROR':
+                        errorState.setAttribute('class', 'fill-red-100 dark:fill-red-900 stroke-red-600 dark:stroke-red-400');
+                        document.getElementById('pin-to-error-arrow').classList.add('fill-red-600', 'dark:fill-red-400');
+                        break;
+                }
+            }
+            
+            // Card Drag and Drop 
+            atmCard.addEventListener('mousedown', startDragCard);
+            atmCard.addEventListener('touchstart', startDragCard);
+            
+            function startDragCard(e) {
+                if (currentState !== 'IDLE') return;
+                
+                isDraggingCard = true;
+                
+                // Get initial mouse/touch position
+                if (e.type === 'mousedown') {
+                    e.preventDefault();
+                    cardOffsetX = e.clientX - atmCard.getBoundingClientRect().left;
+                    cardOffsetY = e.clientY - atmCard.getBoundingClientRect().top;
+                } else {
+                    cardOffsetX = e.touches[0].clientX - atmCard.getBoundingClientRect().left;
+                    cardOffsetY = e.touches[0].clientY - atmCard.getBoundingClientRect().top;
+                }
+                
+                // Position card absolutely for dragging
+                const rect = atmCard.getBoundingClientRect();
+                atmCard.style.position = 'fixed';
+                atmCard.style.top = rect.top + 'px';
+                atmCard.style.left = rect.left + 'px';
+                atmCard.style.zIndex = '1000';
+                
+                document.addEventListener('mousemove', dragCard);
+                document.addEventListener('touchmove', dragCard);
+                document.addEventListener('mouseup', stopDragCard);
+                document.addEventListener('touchend', stopDragCard);
+            }
+            
+            function dragCard(e) {
+                if (!isDraggingCard) return;
+                
+                let clientX, clientY;
+                
+                if (e.type === 'mousemove') {
+                    e.preventDefault();
+                    clientX = e.clientX;
+                    clientY = e.clientY;
+                } else {
+                    clientX = e.touches[0].clientX;
+                    clientY = e.touches[0].clientY;
+                }
+                
+                // Move the card
+                atmCard.style.left = (clientX - cardOffsetX) + 'px';
+                atmCard.style.top = (clientY - cardOffsetY) + 'px';
+                
+                // Check if card is over the card slot
+                const cardRect = atmCard.getBoundingClientRect();
+                const slotRect = cardSlot.getBoundingClientRect();
+                
+                if (
+                    cardRect.right > slotRect.left &&
+                    cardRect.left < slotRect.right &&
+                    cardRect.bottom > slotRect.top &&
+                    cardRect.top < slotRect.bottom
+                ) {
+                    cardSlot.classList.add('bg-blue-500', 'bg-opacity-30');
+                } else {
+                    cardSlot.classList.remove('bg-blue-500', 'bg-opacity-30');
+                }
+            }
+            
+            function stopDragCard(e) {
+                if (!isDraggingCard) return;
+                
+                // Check if card is over the card slot
+                const cardRect = atmCard.getBoundingClientRect();
+                const slotRect = cardSlot.getBoundingClientRect();
+                
+                if (
+                    cardRect.right > slotRect.left &&
+                    cardRect.left < slotRect.right &&
+                    cardRect.bottom > slotRect.top &&
+                    cardRect.top < slotRect.bottom
+                ) {
+                    // Card is inserted
+                    insertCard();
+                } else {
+                    // Return to original position with animation
+                    resetCardPosition();
+                }
+                
+                cardSlot.classList.remove('bg-blue-500', 'bg-opacity-30');
+                
+                isDraggingCard = false;
+                document.removeEventListener('mousemove', dragCard);
+                document.removeEventListener('touchmove', dragCard);
+                document.removeEventListener('mouseup', stopDragCard);
+                document.removeEventListener('touchend', stopDragCard);
+            }
+            
+            function insertCard() {
+                // Animate card insertion
+                atmCard.style.transition = 'all 0.5s ease-in-out';
+                atmCard.style.transform = 'translateY(100px) scale(0.5)';
+                atmCard.style.opacity = '0';
+                
+                // After animation, change state
+                setTimeout(() => {
+                    hideCard();
+                    // Explicitly reset PIN display before showing PIN entry screen
+                    resetPinDisplay();
+                    pinErrorMsg.classList.add('hidden');
+                    showState('WAITING_PIN');
+                }, 500);
+            }
+            
+            // Cash click to take
+            cashElement.addEventListener('click', takeCash);
+            
+            function takeCash() {
+                if (currentState !== 'TRANSACTION_COMPLETE') return;
+                
+                // Highlight the path from complete to idle
+                document.getElementById('complete-to-idle-arrow').classList.add('fill-green-600', 'dark:fill-green-400');
+                
+                // Animate cash being taken
+                cashElement.style.transition = 'all 0.5s ease-in-out';
+                cashElement.style.transform = 'scale(0.5)';
+                cashElement.style.opacity = '0';
+                
+                // After animation, return to IDLE state
+                setTimeout(() => {
+                    hideCash();
+                    resetCardPosition(); // Use resetCardPosition which calls showCard()
+                    showState('IDLE');
+                }, 500);
+            }
+            
+            // Keypad Functionality
+            keypadBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (currentState !== 'WAITING_PIN') return;
+                    
+                    const key = btn.getAttribute('data-key');
+                    
+                    if (key === 'clear') {
+                        resetPinDisplay();
+                    } else if (key === 'enter') {
+                        verifyPin();
+                    } else if (enteredPin.length < 4) {
+                        enteredPin += key;
+                        updatePinDisplay();
+                    }
+                });
+            });
+            
+            function verifyPin() {
+                if (enteredPin === CORRECT_PIN) {
+                    pinErrorMsg.classList.add('hidden');
+                    showState('MENU');
+                } else {
+                    // Show error message
+                    pinErrorMsg.classList.remove('hidden');
+                    resetPinDisplay();
+                    
+                    // Show ERROR state briefly
+                    showState('ERROR');
+                    errorMessage.textContent = 'Incorrect PIN entered';
+                    
+                    // Return to PIN state after timeout
+                    setTimeout(() => {
+                        showState('WAITING_PIN');
+                    }, 2000);
+                }
+            }
+            
+            // Transaction functionality
+            withdrawBtn.addEventListener('click', () => {
+                showState('WITHDRAWING');
+            });
+            
+            balanceBtn.addEventListener('click', () => {
+                // Highlight the direct path from menu to transaction complete
+                document.getElementById('menu-to-complete-arrow').classList.add('fill-green-600', 'dark:fill-green-400');
+                
+                // Short delay to show the highlighted arrow before changing state
+                setTimeout(() => {
+                    showState('TRANSACTION_COMPLETE');
+                    transactionMessage.textContent = `Your balance is $${ACCOUNT_BALANCE.toFixed(2)}`;
+                    
+                    // Show the another transaction button for balance check (but not for cash withdrawal)
+                    document.getElementById('another-transaction-container').style.display = 'block';
+                    
+                    // Highlight the appropriate arrow (complete-to-menu since user can do another transaction)
+                    document.getElementById('complete-to-menu-arrow').classList.add('fill-green-600', 'dark:fill-green-400');
+                }, 300);
+            });
+            
+            exitBtn.addEventListener('click', () => {
+                // Highlight the path from menu to idle
+                document.getElementById('menu-to-idle-arrow').classList.add('fill-green-600', 'dark:fill-green-400');
+                
+                // Return card animation with a small delay to show the highlighted arrow
+                setTimeout(() => {
+                    returnCard();
+                }, 300);
+            });
+            
+            amountBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const amount = parseInt(btn.getAttribute('data-amount'));
+                    
+                    if (amount > ACCOUNT_BALANCE) {
+                        showState('ERROR');
+                        errorMessage.textContent = 'Insufficient funds';
+                        
+                        // Return to withdrawing state after timeout
+                        setTimeout(() => {
+                            showState('WITHDRAWING');
+                        }, 2000);
+                        return;
+                    }
+                    
+                    selectedAmount = amount;
+                    showState('DISPENSING');
+                    
+                    // Simulate processing
+                    setTimeout(() => {
+                        // Update account balance
+                        ACCOUNT_BALANCE -= selectedAmount;
+                        // Update the balance display
+                        updateBalanceDisplay();
+                        
+                        showState('TRANSACTION_COMPLETE');
+                        transactionMessage.textContent = `Please take your cash`;
+                        
+                        // Hide the another transaction button when cash is shown
+                        document.getElementById('another-transaction-container').style.display = 'none';
+                        
+                        // Show the cash
+                        showCash(selectedAmount);
+                        
+                        // Highlight the path from complete to idle (since cash taking will return to idle)
+                        document.getElementById('complete-to-idle-arrow').classList.add('fill-green-600', 'dark:fill-green-400');
+                    }, 2000);
+                });
+            });
+            
+            backToMenuBtn.addEventListener('click', () => {
+                showState('MENU');
+            });
+            
+            anotherTransactionBtn.addEventListener('click', () => {
+                // Hide cash if visible
+                if (!cashElement.classList.contains('hidden')) {
+                    hideCash();
+                }
+                
+                // Highlight the arrow from complete to menu before changing state
+                document.getElementById('complete-to-menu-arrow').classList.add('fill-green-600', 'dark:fill-green-400');
+                
+                // Short delay to show the highlighted arrow before changing state
+                setTimeout(() => {
+                    showState('MENU');
+                }, 300);
+            });
+            
+            tryAgainBtn.addEventListener('click', () => {
+                if (currentState === 'ERROR') {
+                    // If error was during PIN entry
+                    if (errorMessage.textContent.includes('PIN')) {
+                        showState('WAITING_PIN');
+                    } else {
+                        showState('MENU');
+                    }
+                }
+            });
+            
+            function returnCard() {
+                // Get the original card container position
+                const cardContainer = document.getElementById('card-container');
+                const containerRect = cardContainer.getBoundingClientRect();
+                
+                // Show card with animation that returns it to the original container
+                atmCard.style.display = 'block';
+                atmCard.style.opacity = '0';
+                atmCard.style.position = 'fixed';
+                
+                // Calculate center of the card container
+                const targetX = containerRect.left + (containerRect.width / 2) - (atmCard.offsetWidth / 2);
+                const targetY = containerRect.top + (containerRect.height / 2) - (atmCard.offsetHeight / 2);
+                
+                // First fade in
+                setTimeout(() => {
+                    atmCard.style.transition = 'opacity 0.3s ease-in-out';
+                    atmCard.style.opacity = '1';
+                    
+                    // Then animate to original position
+                    setTimeout(() => {
+                        atmCard.style.transition = 'all 0.5s ease-in-out';
+                        atmCard.style.left = targetX + 'px';
+                        atmCard.style.top = targetY + 'px';
+                        
+                        // Finally, reset to normal display after animation completes
+                        setTimeout(() => {
+                            resetCardPosition();
+                            showState('IDLE');
+                        }, 500);
+                    }, 300);
+                }, 100);
+            }
+            
+            // Restart button
+            restartBtn.addEventListener('click', () => {
+                initializeATM();
+            });
+            
+            // Initialize on load
+            initializeATM();
+        });
+    </script>
+</body>
+</html>
+
+
+
