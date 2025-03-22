@@ -1,0 +1,265 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TV Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#5D5CDE',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="transition-colors duration-300 bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-center flex-grow">TV Simulator</h1>
+            <button id="restart-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition-colors duration-300">
+                Restart Simulation
+            </button>
+        </div>
+        
+        <div class="flex flex-col md:flex-row gap-8">
+            <!-- TV Display -->
+            <div class="w-full md:w-2/3">
+                <div class="bg-gray-800 rounded-lg p-4 border-8 border-gray-700 shadow-lg">
+                    <div id="tv-screen" class="bg-black h-80 rounded flex items-center justify-center transition-all duration-500">
+                        <div id="tv-content" class="hidden text-center">
+                            <div id="character" class="text-9xl mb-4">😎</div>
+                            <div id="channel-info" class="text-white text-2xl">Channel 1</div>
+                        </div>
+                        <div id="tv-off" class="text-gray-700 text-2xl">TV is OFF</div>
+                        <div id="tv-broken" class="hidden text-red-500 text-3xl font-bold text-center">
+                            <div class="mb-4">⚠️</div>
+                            <div>OUT OF ORDER</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Remote Control -->
+            <div class="w-full md:w-1/3">
+                <div class="bg-gray-300 dark:bg-gray-700 rounded-lg p-6 shadow-lg">
+                    <h2 class="text-xl font-bold mb-4 text-center">Remote Control</h2>
+                    <div class="flex justify-center mb-4">
+                        <button id="power-btn" class="w-16 h-16 rounded-full bg-red-600 text-white font-bold shadow-md hover:bg-red-700 active:transform active:scale-95">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                        <button class="channel-btn bg-primary text-white py-3 rounded-lg shadow hover:bg-opacity-90 active:transform active:scale-95">1</button>
+                        <button class="channel-btn bg-primary text-white py-3 rounded-lg shadow hover:bg-opacity-90 active:transform active:scale-95">2</button>
+                        <button class="channel-btn bg-primary text-white py-3 rounded-lg shadow hover:bg-opacity-90 active:transform active:scale-95">3</button>
+                        <button class="channel-btn bg-primary text-white py-3 rounded-lg shadow hover:bg-opacity-90 active:transform active:scale-95">4</button>
+                        <button class="channel-btn bg-primary text-white py-3 rounded-lg shadow hover:bg-opacity-90 active:transform active:scale-95">5</button>
+                        <button class="channel-btn bg-primary text-white py-3 rounded-lg shadow hover:bg-opacity-90 active:transform active:scale-95">6</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- State Transition Diagram -->
+        <div class="mt-8">
+            <h2 class="text-xl font-bold mb-4">State Transition Diagram</h2>
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+                <svg id="state-diagram" class="w-full h-60" viewBox="0 0 500 200">
+                    <!-- Start State -->
+                    <circle cx="50" cy="100" r="10" class="fill-gray-300 dark:fill-gray-600" />
+                    <line x1="60" y1="100" x2="120" y2="100" stroke="currentColor" stroke-width="2" />
+                    <polygon points="115,95 125,100 115,105" class="fill-current" />
+                    
+                    <!-- OFF State -->
+                    <circle id="off-state" cx="150" cy="100" r="40" class="fill-red-100 dark:fill-red-900 stroke-red-600 dark:stroke-red-400" stroke-width="4" />
+                    <text x="150" y="105" text-anchor="middle" class="text-base fill-current font-bold">OFF</text>
+                    
+                    <!-- ON State -->
+                    <circle id="on-state" cx="350" cy="100" r="40" class="fill-gray-100 dark:fill-gray-700 stroke-gray-400" stroke-width="2" />
+                    <text x="350" y="105" text-anchor="middle" class="text-base fill-current font-bold">ON</text>
+                    
+                    <!-- Transitions -->
+                    <path id="to-on" d="M190,90 C230,60 270,60 310,90" fill="none" stroke="currentColor" stroke-width="2" />
+                    <polygon id="to-on-arrow" points="305,87 315,92 305,97" class="fill-current" />
+                    <text x="250" y="65" text-anchor="middle" class="text-sm fill-current">Power ON</text>
+                    
+                    <path id="to-off" d="M310,110 C270,140 230,140 190,110" fill="none" stroke="currentColor" stroke-width="2" />
+                    <polygon id="to-off-arrow" points="195,113 185,108 195,103" class="fill-current" />
+                    <text x="250" y="155" text-anchor="middle" class="text-sm fill-current">Power OFF</text>
+                    
+                    <!-- End State -->
+                    <circle cx="50" cy="150" r="15" class="fill-none stroke-current" stroke-width="2" />
+                    <circle cx="50" cy="150" r="10" class="fill-gray-300 dark:fill-gray-600" />
+                    <line x1="120" y1="130" x2="60" y2="145" stroke="currentColor" stroke-width="2" />
+                    <polygon points="65,143 55,148 63,138" class="fill-current" />
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check for dark mode preference
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+        
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+            if (event.matches) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        });
+        
+        // TV Simulator Logic
+        document.addEventListener('DOMContentLoaded', () => {
+            const tvScreen = document.getElementById('tv-screen');
+            const tvContent = document.getElementById('tv-content');
+            const tvOff = document.getElementById('tv-off');
+            const tvBroken = document.getElementById('tv-broken');
+            const powerBtn = document.getElementById('power-btn');
+            const restartBtn = document.getElementById('restart-btn');
+            const channelBtns = document.querySelectorAll('.channel-btn');
+            const character = document.getElementById('character');
+            const channelInfo = document.getElementById('channel-info');
+            const offState = document.getElementById('off-state');
+            const onState = document.getElementById('on-state');
+            
+            // Characters for different channels
+            const characters = ['😎', '🤩', '🤪', '😁', '😂', '🤓'];
+            
+            let isOn = false;
+            let currentChannel = 1;
+            let powerCycles = 0;
+            let isBroken = false;
+            
+            // Initialize or reset the TV
+            function resetTV() {
+                // Reset variables
+                isOn = false;
+                currentChannel = 1;
+                powerCycles = 0;
+                isBroken = false;
+                
+                // Reset UI
+                tvScreen.classList.add('bg-black');
+                tvScreen.classList.remove('bg-blue-100', 'dark:bg-blue-900');
+                tvContent.classList.add('hidden');
+                tvOff.classList.remove('hidden');
+                tvBroken.classList.add('hidden');
+                
+                character.textContent = characters[0];
+                channelInfo.textContent = 'Channel 1';
+                
+                // Re-enable power button
+                powerBtn.disabled = false;
+                powerBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                
+                // Reset state diagram
+                onState.classList.remove('fill-green-100', 'dark:fill-green-900', 'stroke-green-600', 'dark:stroke-green-400');
+                onState.classList.add('fill-gray-100', 'dark:fill-gray-700', 'stroke-gray-400');
+                
+                offState.classList.remove('fill-gray-100', 'dark:fill-gray-700', 'stroke-gray-400');
+                offState.classList.add('fill-red-100', 'dark:fill-red-900', 'stroke-red-600', 'dark:stroke-red-400');
+                
+                document.getElementById('to-off-arrow').classList.remove('fill-green-600', 'dark:fill-green-400');
+                document.getElementById('to-on-arrow').classList.remove('fill-green-600', 'dark:fill-green-400');
+            }
+            
+            // Toggle TV power
+            powerBtn.addEventListener('click', () => {
+                if (isBroken) return;
+                
+                powerCycles++;
+                isOn = !isOn;
+                
+                // Check if TV should break
+                if (powerCycles >= 10) {
+                    isBroken = true;
+                    tvScreen.classList.remove('bg-blue-100', 'dark:bg-blue-900');
+                    tvScreen.classList.add('bg-black');
+                    tvContent.classList.add('hidden');
+                    tvOff.classList.add('hidden');
+                    tvBroken.classList.remove('hidden');
+                    
+                    // Disable power button
+                    powerBtn.disabled = true;
+                    powerBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                    
+                    // Update state diagram
+                    onState.classList.remove('fill-green-100', 'dark:fill-green-900', 'stroke-green-600', 'dark:stroke-green-400');
+                    onState.classList.add('fill-gray-100', 'dark:fill-gray-700', 'stroke-gray-400');
+                    
+                    offState.classList.remove('fill-gray-100', 'dark:fill-gray-700', 'stroke-gray-400');
+                    offState.classList.add('fill-red-100', 'dark:fill-red-900', 'stroke-red-600', 'dark:stroke-red-400');
+                    
+                    return;
+                }
+                
+                if (isOn) {
+                    tvScreen.classList.remove('bg-black');
+                    tvScreen.classList.add('bg-blue-100', 'dark:bg-blue-900');
+                    tvContent.classList.remove('hidden');
+                    tvOff.classList.add('hidden');
+                    
+                    // Update state diagram
+                    offState.classList.remove('fill-red-100', 'dark:fill-red-900', 'stroke-red-600', 'dark:stroke-red-400');
+                    offState.classList.add('fill-gray-100', 'dark:fill-gray-700', 'stroke-gray-400');
+                    
+                    onState.classList.remove('fill-gray-100', 'dark:fill-gray-700', 'stroke-gray-400');
+                    onState.classList.add('fill-green-100', 'dark:fill-green-900', 'stroke-green-600', 'dark:stroke-green-400');
+                    
+                    document.getElementById('to-on-arrow').classList.add('fill-green-600', 'dark:fill-green-400');
+                    document.getElementById('to-off-arrow').classList.remove('fill-green-600', 'dark:fill-green-400');
+                } else {
+                    tvScreen.classList.add('bg-black');
+                    tvScreen.classList.remove('bg-blue-100', 'dark:bg-blue-900');
+                    tvContent.classList.add('hidden');
+                    tvOff.classList.remove('hidden');
+                    
+                    // Update state diagram
+                    onState.classList.remove('fill-green-100', 'dark:fill-green-900', 'stroke-green-600', 'dark:stroke-green-400');
+                    onState.classList.add('fill-gray-100', 'dark:fill-gray-700', 'stroke-gray-400');
+                    
+                    offState.classList.remove('fill-gray-100', 'dark:fill-gray-700', 'stroke-gray-400');
+                    offState.classList.add('fill-red-100', 'dark:fill-red-900', 'stroke-red-600', 'dark:stroke-red-400');
+                    
+                    document.getElementById('to-off-arrow').classList.add('fill-green-600', 'dark:fill-green-400');
+                    document.getElementById('to-on-arrow').classList.remove('fill-green-600', 'dark:fill-green-400');
+                }
+            });
+            
+            // Restart button
+            restartBtn.addEventListener('click', resetTV);
+            
+            // Change channel buttons
+            channelBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (!isOn || isBroken) return; // TV must be on and working to change channel
+                    
+                    const channel = parseInt(btn.textContent);
+                    currentChannel = channel;
+                    character.textContent = characters[channel - 1] || '👾';
+                    channelInfo.textContent = `Channel ${channel}`;
+                    
+                    // Flash effect for channel change
+                    tvScreen.classList.add('opacity-75');
+                    setTimeout(() => {
+                        tvScreen.classList.remove('opacity-75');
+                    }, 150);
+                });
+            });
+        });
+    </script>
+</body>
+</html>
+
