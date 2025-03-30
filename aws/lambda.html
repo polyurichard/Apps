@@ -1,0 +1,1632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS Lambda Performance Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.1.0/dist/chartjs-plugin-annotation.min.js"></script>
+    <style>
+        .dark {
+            color-scheme: dark;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #5D5CDE;
+            cursor: pointer;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #5D5CDE;
+            cursor: pointer;
+        }
+        .card {
+            transition: all 0.3s ease;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.03); }
+            100% { transform: scale(1); }
+        }
+        .highlight {
+            animation: pulse 0.8s ease-in-out;
+        }
+        .lambda-box {
+            width: 24px;
+            height: 24px;
+            margin: 2px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 3px;
+            font-size: 10px;
+            transition: all 0.3s ease;
+        }
+        .lambda-provisioned {
+            background-color: #5D5CDE;
+            color: white;
+        }
+        .lambda-reserved {
+            background-color: rgba(93, 92, 222, 0.3);
+            border: 1px dashed #5D5CDE;
+            color: #5D5CDE;
+        }
+        .lambda-cold {
+            background-color: #ef4444;
+            color: white;
+        }
+        .lambda-warm {
+            background-color: #22c55e;
+            color: white;
+        }
+        .lambda-normal {
+            background-color: #cbd5e1;
+            color: #475569;
+        }
+        .lambda-dark {
+            background-color: #475569;
+            color: #f8fafc;
+        }
+    </style>
+</head>
+<body class="font-sans bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <h1 class="text-3xl font-bold text-center mb-2">AWS Lambda Performance Explorer</h1>
+        <p class="text-center mb-8 text-gray-600 dark:text-gray-400">Understand how memory allocation affects Lambda performance and cost</p>
+        
+        <!-- Main Tabs Navigation -->
+        <div class="mb-6 border-b border-gray-200 dark:border-gray-700">
+            <ul class="flex flex-wrap -mb-px" id="mainTabs" role="tablist">
+                <li class="mr-2" role="presentation">
+                    <button class="main-tab inline-block p-4 border-b-2 border-[#5D5CDE] rounded-t-lg active" 
+                            id="simulator-tab" 
+                            data-tab="simulator-content" 
+                            type="button" 
+                            role="tab" 
+                            aria-controls="simulator" 
+                            aria-selected="true">
+                        Lambda Simulator
+                    </button>
+                </li>
+                <li class="mr-2" role="presentation">
+                    <button class="main-tab inline-block p-4 border-b-2 border-transparent rounded-t-lg hover:border-gray-300 dark:hover:border-gray-600" 
+                            id="help-tab" 
+                            data-tab="help-content" 
+                            type="button" 
+                            role="tab" 
+                            aria-controls="help" 
+                            aria-selected="false">
+                        AWS Lambda Guide
+                    </button>
+                </li>
+            </ul>
+        </div>
+        
+        <!-- Main Tab Content -->
+        <div id="mainTabContent">
+            <!-- Simulator Tab Content -->
+            <div class="main-tab-content block" id="simulator-content" role="tabpanel" aria-labelledby="simulator-tab">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Controls Section -->
+                    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-lg card">
+                        <h2 class="text-xl font-semibold mb-4">Workload Type</h2>
+                        <div class="mb-6">
+                            <label for="workloadSelect" class="block mb-2 text-sm font-medium">
+                                Select your function's primary workload type:
+                            </label>
+                            <select 
+                                id="workloadSelect" 
+                                class="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-base"
+                            >
+                                <option value="compute">Compute-Intensive (e.g., image processing)</option>
+
+                            </select>
+                        </div>
+                        
+                        <h2 class="text-xl font-semibold mb-4">Lambda Configuration</h2>
+                        
+                        <div class="mb-6">
+                            <label for="memorySlider" class="block mb-2 text-sm font-medium">
+                                Memory Allocation: <span id="memoryValue" class="font-bold text-[#5D5CDE]">128</span> MB
+                            </label>
+                            <input 
+                                type="range" 
+                                id="memorySlider" 
+                                min="0" 
+                                max="7" 
+                                step="1" 
+                                value="0"
+                                class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                            >
+                            <div class="flex justify-between mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                <span>128 MB</span>
+                                <span>10,240 MB</span>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-6">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <!-- Concurrency Settings -->
+                                <div>
+                                    <h3 class="text-sm font-semibold mb-2">Concurrency Settings</h3>
+                                    <label class="block mb-2 text-sm font-medium">
+                                        Provisioned Concurrency: <span id="provisionedValue" class="font-bold text-[#5D5CDE]">0</span>
+                                    </label>
+                                    <div class="flex flex-wrap gap-2">
+                                        <button class="provisioned-btn px-3 py-1.5 rounded-md bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-[#5D5CDE]/10 text-sm" data-value="0">0</button>
+                                        <button class="provisioned-btn px-3 py-1.5 rounded-md bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-[#5D5CDE]/10 text-sm" data-value="2">2</button>
+                                        <button class="provisioned-btn px-3 py-1.5 rounded-md bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-[#5D5CDE]/10 text-sm" data-value="4">4</button>
+                                        <button class="provisioned-btn px-3 py-1.5 rounded-md bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-[#5D5CDE]/10 text-sm" data-value="6">6</button>
+                                        <button class="provisioned-btn px-3 py-1.5 rounded-md bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-[#5D5CDE]/10 text-sm" data-value="8">8</button>
+                                        <button class="provisioned-btn px-3 py-1.5 rounded-md bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 active:bg-[#5D5CDE]/10 text-sm" data-value="10">10</button>
+                                    </div>
+                                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Provisions instances that are always ready to serve requests (eliminates cold starts).</p>
+                                </div>
+                                
+                                <!-- Monthly Invocations -->
+                                <div>
+                                    <h3 class="text-sm font-semibold mb-2">Request Volume</h3>
+                                    <label for="invocationsSelect" class="block mb-2 text-sm font-medium">
+                                        Monthly Invocations:
+                                    </label>
+                                    <select 
+                                        id="invocationsSelect" 
+                                        class="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-base"
+                                    >
+                                        <option value="10000">10,000 (10K)</option>
+                                        <option value="100000" selected>100,000 (100K)</option>
+                                        <option value="1000000">1,000,000 (1M)</option>
+                                        <option value="5000000">5,000,000 (5M)</option>
+                                        <option value="10000000">10,000,000 (10M)</option>
+                                        <option value="50000000">50,000,000 (50M)</option>
+                                        <option value="100000000">100,000,000 (100M)</option>
+                                    </select>
+                                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Number of times your function is called per month.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- First row of metrics -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg">
+                                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Average Execution Duration</h3>
+                                <p id="durationValue" class="text-2xl font-bold mt-1">11.72s</p>
+                            </div>
+                            <div class="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg">
+                                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Cold Start Time</h3>
+                                <p id="coldStartValue" class="text-2xl font-bold mt-1">0.0ms</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Second row of metrics -->
+                        <div class="mt-4">
+                            <div class="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg">
+                                <div class="flex justify-between items-center">
+                                    <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Monthly Cost</h3>
+                                    <p id="costValue" class="text-2xl font-bold">$0.0246</p>
+                                </div>
+                                
+                                <!-- Cost breakdown bar -->
+                                <div class="mt-2">
+                                    <div class="overflow-hidden h-6 mb-1 text-xs flex rounded bg-gray-200 dark:bg-gray-600">
+                                        <div id="executionCostBar" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500 transition-all duration-500 ease-in-out" style="width:80%"></div>
+                                        <div id="concurrencyCostBar" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-purple-500 transition-all duration-500 ease-in-out" style="width:20%"></div>
+                                    </div>
+                                    <div class="flex justify-between text-xs mt-1">
+                                        <div class="flex items-center">
+                                            <div class="w-3 h-3 rounded-full bg-blue-500 mr-1"></div>
+                                            <span>Execution: <span id="executionCostValue">$0.00</span></span>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <div class="w-3 h-3 rounded-full bg-purple-500 mr-1"></div>
+                                            <span>Provisioned Concurrency: <span id="concurrencyCostValue">$0.00</span></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Chart Section -->
+                    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-lg card">
+                        <h2 class="text-xl font-semibold mb-4">Performance Metrics</h2>
+                        <div class="h-80 mb-6">
+                            <canvas id="metricsChart"></canvas>
+                        </div>
+                        
+                        <!-- Concurrency Visualization Section -->
+                        <div class="mt-6">
+                            <h3 class="text-md font-semibold mb-2">Concurrency Visualization</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <h4 class="text-sm font-medium mb-2">Lambda Instance Distribution</h4>
+                                    <div id="lambdaVisualization" class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg min-h-[120px]">
+                                        <!-- Lambda icons will be inserted here -->
+                                    </div>
+                                    <div class="flex flex-wrap mt-2 text-xs">
+                                        <div class="mr-4 flex items-center mb-1">
+                                            <div class="lambda-box lambda-provisioned mr-1">λ</div>
+                                            <span>Provisioned</span>
+                                        </div>
+                                        <div class="flex items-center mb-1">
+                                            <div class="lambda-box lambda-normal dark:lambda-dark mr-1">λ</div>
+                                            <span>On-demand</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <h4 class="text-sm font-medium mt-4 mb-2">Execution Time Breakdown</h4>
+                                    <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                                        <div class="relative pt-1">
+                                            <div class="overflow-hidden h-4 mb-1 text-xs flex rounded bg-gray-200 dark:bg-gray-600">
+                                                <div id="initTimeBar" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-amber-500 transition-all duration-500 ease-in-out" style="width:20%"></div>
+                                                <div id="executionTimeBar" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500 transition-all duration-500 ease-in-out" style="width:80%"></div>
+                                            </div>
+                                            <div class="flex justify-between text-xs">
+                                                <div class="flex items-center">
+                                                    <div class="w-3 h-3 rounded-full bg-amber-500 mr-1"></div>
+                                                    <span>Initialization: <span id="initTimeValue">60ms</span></span>
+                                                </div>
+                                                <div class="flex items-center">
+                                                    <div class="w-3 h-3 rounded-full bg-blue-500 mr-1"></div>
+                                                    <span>Execution: <span id="execTimeValue">11.66s</span></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h4 class="text-sm font-medium mb-2">Cold vs. Warm Starts</h4>
+                                    <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                                        <div class="relative pt-1">
+                                            <div class="flex justify-center mb-2" id="pieChartContainer">
+                                                <div style="height: 120px; width: 120px;">
+                                                    <canvas id="coldWarmPieChart"></canvas>
+                                                </div>
+                                            </div>
+                                            <div class="flex justify-center gap-4 mt-2">
+                                                <div class="flex items-center">
+                                                    <div class="w-3 h-3 rounded-full bg-red-500 mr-1"></div>
+                                                    <span class="text-xs">Cold: <span id="coldStartPercent">100%</span></span>
+                                                </div>
+                                                <div class="flex items-center">
+                                                    <div class="w-3 h-3 rounded-full bg-green-500 mr-1"></div>
+                                                    <span class="text-xs">Warm: <span id="warmStartPercent">0%</span></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="mt-4 text-xs text-gray-500 dark:text-gray-400">
+                                            <div class="flex justify-between">
+                                                <span>Average Response Time: </span>
+                                                <span id="avgResponseTime" class="font-medium text-gray-700 dark:text-gray-300">11.72s</span>
+                                            </div>
+                                            <div class="flex justify-between mt-1">
+                                                <span>Cold Start Impact: </span>
+                                                <span id="coldStartImpact" class="font-medium text-gray-700 dark:text-gray-300">0.0ms</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Help Tab Content -->
+            <div class="main-tab-content hidden" id="help-content" role="tabpanel" aria-labelledby="help-tab">
+                <div class="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-lg card">
+                    <h2 class="text-xl font-semibold mb-4">Understanding AWS Lambda Configuration</h2>
+                    
+                    <!-- Tab Navigation -->
+                    <div class="mb-6 border-b border-gray-200 dark:border-gray-700">
+                        <ul class="flex flex-wrap -mb-px" id="explanationTabs" role="tablist">
+                            <li class="mr-2" role="presentation">
+                                <button class="tab-button inline-block p-4 border-b-2 border-[#5D5CDE] rounded-t-lg active" 
+                                        id="memory-tab" 
+                                        data-tab="memory-content" 
+                                        type="button" 
+                                        role="tab" 
+                                        aria-controls="memory" 
+                                        aria-selected="true">
+                                    Memory & Performance
+                                </button>
+                            </li>
+                            <li class="mr-2" role="presentation">
+                                <button class="tab-button inline-block p-4 border-b-2 border-transparent rounded-t-lg hover:border-gray-300 dark:hover:border-gray-600" 
+                                        id="concurrency-tab" 
+                                        data-tab="concurrency-content" 
+                                        type="button" 
+                                        role="tab" 
+                                        aria-controls="concurrency" 
+                                        aria-selected="false">
+                                    Concurrency Options
+                                </button>
+                            </li>
+                            <li class="mr-2" role="presentation">
+                                <button class="tab-button inline-block p-4 border-b-2 border-transparent rounded-t-lg hover:border-gray-300 dark:hover:border-gray-600" 
+                                        id="cost-tab" 
+                                        data-tab="cost-content" 
+                                        type="button" 
+                                        role="tab" 
+                                        aria-controls="cost" 
+                                        aria-selected="false">
+                                    Cost Optimization
+                                </button>
+                            </li>
+                            <li role="presentation">
+                                <button class="tab-button inline-block p-4 border-b-2 border-transparent rounded-t-lg hover:border-gray-300 dark:hover:border-gray-600" 
+                                        id="practices-tab" 
+                                        data-tab="practices-content" 
+                                        type="button" 
+                                        role="tab" 
+                                        aria-controls="practices" 
+                                        aria-selected="false">
+                                    Best Practices
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <!-- Tab Content -->
+                    <div id="explanationTabContent">
+                        <!-- Memory & Performance Tab -->
+                        <div class="tab-content block" id="memory-content" role="tabpanel" aria-labelledby="memory-tab">
+                            <div class="prose dark:prose-invert prose-sm md:prose-base max-w-none">
+                                <p class="text-gray-700 dark:text-gray-300">Memory is the principal lever available to Lambda developers for controlling the performance of a function. The amount of memory also determines the amount of virtual CPU available:</p>
+                                <ul class="list-disc pl-5 mt-2 mb-4 text-gray-700 dark:text-gray-300">
+                                    <li>Increasing memory proportionally increases the amount of CPU available</li>
+                                    <li>More CPU can significantly reduce execution time for compute-intensive tasks</li>
+                                    <li>Lambda charges for the total amount of gigabyte-seconds consumed</li>
+                                    <li>Often, the cost increase from higher memory is offset by reduced execution time</li>
+                                </ul>
+                                
+                                <h3 class="font-semibold mt-6 mb-4 text-gray-800 dark:text-gray-100">Workload Types and Memory Allocation</h3>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                                    <div class="border dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-750 shadow-sm">
+                                        <h4 class="font-medium text-[#5D5CDE] mb-2">Compute-Intensive</h4>
+                                        <p class="text-sm text-gray-700 dark:text-gray-300">Shows dramatic performance improvements with higher memory allocations. The execution time decreases almost linearly with CPU power, often making higher memory settings more cost-effective despite higher per-GB pricing.</p>
+                                        <p class="text-sm mt-2 italic text-gray-600 dark:text-gray-400">Examples: Image/video processing, ML inference, data transformation</p>
+                                    </div>
+                                    
+                                    <div class="border dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-750 shadow-sm">
+                                        <h4 class="font-medium text-[#5D5CDE] mb-2">I/O-Bound</h4>
+                                        <p class="text-sm text-gray-700 dark:text-gray-300">Shows moderate improvements with increased memory, but eventually hits diminishing returns as the bottleneck shifts to external resources. Mid-range memory settings often provide the best cost/performance balance.</p>
+                                        <p class="text-sm mt-2 italic text-gray-600 dark:text-gray-400">Examples: Database operations, file processing, message queue handling</p>
+                                    </div>
+                                    
+                                    <div class="border dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-750 shadow-sm">
+                                        <h4 class="font-medium text-[#5D5CDE] mb-2">Network-Bound</h4>
+                                        <p class="text-sm text-gray-700 dark:text-gray-300">Shows minimal benefit from higher memory allocations as the primary bottleneck is external network latency. Lower memory settings are typically more cost-effective for these workloads.</p>
+                                        <p class="text-sm mt-2 italic text-gray-600 dark:text-gray-400">Examples: API calls, HTTP requests, web scraping</p>
+                                    </div>
+                                </div>
+                                
+                                <h3 class="font-semibold mt-6 mb-3 text-gray-800 dark:text-gray-100">Key Memory Insights</h3>
+                                <ul class="list-disc pl-5 mt-2 mb-4 text-gray-700 dark:text-gray-300">
+                                    <li>For compute-intensive workloads, look for the "cost minimum" point where the duration reduction balances the higher GB-second cost</li>
+                                    <li>For I/O and network-bound workloads, increased memory beyond a certain threshold provides minimal performance benefit but significantly increases cost</li>
+                                    <li>Test your specific functions with different memory configurations to find the optimal setting for your workload characteristics</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <!-- Concurrency Options Tab -->
+                        <div class="tab-content hidden" id="concurrency-content" role="tabpanel" aria-labelledby="concurrency-tab">
+                            <div class="prose dark:prose-invert prose-sm md:prose-base max-w-none">
+                                <p class="text-gray-700 dark:text-gray-300">AWS Lambda provides several concurrency control mechanisms that help you manage how your functions scale and perform under load:</p>
+                                
+                                <h3 class="font-semibold mt-6 mb-3 text-gray-800 dark:text-gray-100">Reserved Concurrency</h3>
+                                <p class="text-gray-700 dark:text-gray-300">Reserved concurrency establishes a ceiling for the maximum number of concurrent instances for a function. When you configure reserved concurrency, your function is guaranteed to be able to scale to this concurrency level, but it cannot scale beyond it.</p>
+                                
+                                <div class="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg my-4 shadow-sm">
+                                    <h4 class="font-medium text-blue-800 dark:text-blue-300 mb-2">When to Use Reserved Concurrency</h4>
+                                    <ul class="list-disc pl-5 text-sm text-gray-700 dark:text-gray-300">
+                                        <li>To prevent a function from consuming all available concurrency in your account</li>
+                                        <li>To ensure critical functions have capacity available when needed</li>
+                                        <li>To limit a function's impact on downstream resources that can't handle high concurrency (e.g., database connections)</li>
+                                        <li>As a cost control measure to prevent unexpected scaling and associated costs</li>
+                                    </ul>
+                                </div>
+                                
+                                <p class="text-sm mb-6 text-gray-600 dark:text-gray-400">Reserved concurrency itself doesn't cost anything extra--you only pay for function invocations and execution time as normal. However, it can impact your application's ability to scale and handle traffic spikes.</p>
+                                
+                                <h3 class="font-semibold mt-6 mb-3 text-gray-800 dark:text-gray-100">Provisioned Concurrency</h3>
+                                <p class="text-gray-700 dark:text-gray-300">Provisioned concurrency initializes and keeps a set number of execution environments warm and ready to respond to requests. This eliminates cold starts, providing more consistent invocation times for latency-sensitive applications.</p>
+                                
+                                <div class="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg my-4 shadow-sm">
+                                    <h4 class="font-medium text-blue-800 dark:text-blue-300 mb-2">When to Use Provisioned Concurrency</h4>
+                                    <ul class="list-disc pl-5 text-sm text-gray-700 dark:text-gray-300">
+                                        <li>For user-facing applications where consistent low latency is critical</li>
+                                        <li>When using runtimes with longer initialization times (e.g., Java, .NET)</li>
+                                        <li>For functions with complex dependencies or large package sizes</li>
+                                        <li>For predictable workloads with consistent traffic patterns</li>
+                                    </ul>
+                                </div>
+                                
+                                <p class="text-sm mb-6 text-gray-600 dark:text-gray-400">Unlike reserved concurrency, <strong>provisioned concurrency incurs additional costs</strong>. You pay for provisioned concurrency regardless of whether the function is invoked, based on the configured memory and the amount of time it's provisioned.</p>
+                                
+                                <h3 class="font-semibold mt-6 mb-3 text-gray-800 dark:text-gray-100">Cold Starts vs. Warm Starts</h3>
+                                <p class="text-gray-700 dark:text-gray-300">A "cold start" occurs when Lambda initializes a new execution environment for your function, which can add hundreds of milliseconds to several seconds of latency:</p>
+                                <ul class="list-disc pl-5 mt-2 mb-4 text-gray-700 dark:text-gray-300">
+                                    <li>Initialization delay depends on the runtime, code size, and initialization logic</li>
+                                    <li>Provisioned concurrency eliminates cold starts for the provisioned capacity</li>
+                                    <li>Higher memory settings can reduce the cold start time by allocating more CPU</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <!-- Cost Optimization Tab -->
+                        <div class="tab-content hidden" id="cost-content" role="tabpanel" aria-labelledby="cost-tab">
+                            <div class="prose dark:prose-invert prose-sm md:prose-base max-w-none">
+                                <p class="text-gray-700 dark:text-gray-300">Understanding the cost components of AWS Lambda can help you optimize your serverless applications for both performance and cost-efficiency:</p>
+                                
+                                <h3 class="font-semibold mt-6 mb-3 text-gray-800 dark:text-gray-100">Lambda Pricing Components</h3>
+                                <ol class="list-decimal pl-5 mt-2 mb-4 text-gray-700 dark:text-gray-300">
+                                    <li><strong>Invocation costs:</strong> $0.20 per million requests (first 1 million requests per month are free)</li>
+                                    <li><strong>Compute costs:</strong> $0.0000166667 per GB-second (rounded to nearest 1ms)</li>
+                                    <li><strong>Provisioned concurrency costs:</strong>
+                                        <ul class="list-disc pl-5">
+                                            <li>Charged at the regular GB-second rate ($0.0000166667 per GB-second)</li>
+                                            <li>Charged for the entire time concurrency is provisioned, regardless of usage</li>
+                                            <li>Charged in 5-minute increments from the time concurrency is enabled until disabled</li>
+                                            <li>For a 1GB Lambda, maintaining one unit of provisioned concurrency can cost about $43.20 per month</li>
+                                        </ul>
+                                    </li>
+                                </ol>
+                                
+                                <div class="bg-green-50 dark:bg-green-900/30 p-4 rounded-lg my-4 shadow-sm">
+                                    <h4 class="font-medium text-green-800 dark:text-green-300 mb-2">Cost Optimization Strategies</h4>
+                                    <ul class="list-disc pl-5 text-sm text-gray-700 dark:text-gray-300">
+                                        <li><strong>Right-size memory allocation:</strong> Find the optimal memory setting for your workload type. For compute-intensive functions, higher memory settings often reduce overall cost by decreasing duration drastically.</li>
+                                        <li><strong>Use provisioned concurrency selectively:</strong> Only apply it to functions that need consistent low latency and have predictable traffic patterns.</li>
+                                        <li><strong>Monitor and adjust provisioned concurrency:</strong> Schedule provisioned concurrency based on traffic patterns. Scale it down during low-traffic periods.</li>
+                                        <li><strong>Optimize function code:</strong> Efficient code initialization and execution can reduce duration and cold start times.</li>
+                                        <li><strong>Use caching strategies:</strong> Implement caching for frequently accessed data to reduce execution time.</li>
+                                    </ul>
+                                </div>
+                                
+                                <h3 class="font-semibold mt-6 mb-3 text-gray-800 dark:text-gray-100">Cost Impact of Concurrency Settings</h3>
+                                <p class="text-gray-700 dark:text-gray-300">Concurrency settings have different cost implications:</p>
+                                <ul class="list-disc pl-5 mt-2 mb-4 text-gray-700 dark:text-gray-300">
+                                    <li><strong>Reserved concurrency:</strong> No direct cost impact, but it limits how much your function can scale, potentially affecting availability during traffic spikes.</li>
+                                    <li><strong>Provisioned concurrency:</strong> Significant cost impact as you pay for idle capacity. Most cost-effective when the provisioned capacity closely matches actual traffic patterns.</li>
+                                </ul>
+                                
+                                <div class="border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg my-4 shadow-sm">
+                                    <h4 class="font-medium text-amber-800 dark:text-amber-300 mb-2">Cost-Benefit Analysis Example</h4>
+                                    <p class="text-sm text-gray-700 dark:text-gray-300">Consider a function with 1 million monthly invocations:</p>
+                                    <ul class="list-disc pl-5 text-sm text-gray-700 dark:text-gray-300">
+                                        <li>Standard execution: $0.20 (invocations) + compute costs based on memory/duration</li>
+                                        <li>With 10 units of provisioned concurrency at 1GB: ~$30/month in idle capacity costs + regular compute costs</li>
+                                        <li>The extra $30/month might be justified if cold starts are affecting user experience or business metrics</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Best Practices Tab -->
+                        <div class="tab-content hidden" id="practices-content" role="tabpanel" aria-labelledby="practices-tab">
+                            <div class="prose dark:prose-invert prose-sm md:prose-base max-w-none">
+                                <p class="text-gray-700 dark:text-gray-300">Implementing these best practices can help you get the most out of AWS Lambda while controlling costs and maintaining performance:</p>
+                                
+                                <h3 class="font-semibold mt-6 mb-3 text-gray-800 dark:text-gray-100">Performance Optimization</h3>
+                                <ul class="list-disc pl-5 mt-2 mb-4 text-gray-700 dark:text-gray-300">
+                                    <li><strong>Minimize cold starts:</strong> Keep code and dependencies lean, use provisioned concurrency for latency-sensitive functions, and optimize initialization code.</li>
+                                    <li><strong>Use higher memory settings for CPU-bound tasks:</strong> Since CPU is allocated in proportion to memory, a function with more memory gets more compute power.</li>
+                                    <li><strong>Implement connection reuse:</strong> Reuse database connections, HTTP clients, and SDK clients across invocations within the same execution environment.</li>
+                                    <li><strong>Apply caching strategies:</strong> Cache reference data, configuration, and frequently accessed data either in the execution environment or using external caching services.</li>
+                                    <li><strong>Optimize function dependencies:</strong> Include only necessary packages and optimize their size using techniques like tree shaking.</li>
+                                </ul>
+                                
+                                <h3 class="font-semibold mt-6 mb-3 text-gray-800 dark:text-gray-100">Monitoring and Testing</h3>
+                                <ul class="list-disc pl-5 mt-2 mb-4 text-gray-700 dark:text-gray-300">
+                                    <li><strong>Set up monitoring dashboards:</strong> Monitor invocation counts, errors, duration, and throttling metrics.</li>
+                                    <li><strong>Configure alarms:</strong> Set up alerts for abnormal patterns like high error rates, throttling, or sudden increases in invocations.</li>
+                                    <li><strong>Test with different configurations:</strong> Benchmark your functions with various memory settings and concurrency configurations to find the optimal setup.</li>
+                                    <li><strong>Implement load testing:</strong> Simulate high traffic to understand how your function behaves under stress and adjust concurrency settings accordingly.</li>
+                                </ul>
+                                
+                                <h3 class="font-semibold mt-6 mb-3 text-gray-800 dark:text-gray-100">Concurrency Management Strategy</h3>
+                                <div class="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg my-4 shadow-sm">
+                                    <h4 class="font-medium text-blue-800 dark:text-blue-300 mb-2">For High-Priority, Latency-Sensitive Functions:</h4>
+                                    <ul class="list-disc pl-5 text-sm text-gray-700 dark:text-gray-300">
+                                        <li>Use provisioned concurrency based on traffic patterns</li>
+                                        <li>Set reserved concurrency slightly above expected peak to prevent throttling</li>
+                                        <li>Consider scheduled provisioned concurrency to match traffic patterns</li>
+                                    </ul>
+                                </div>
+                                
+                                <div class="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg my-4 shadow-sm">
+                                    <h4 class="font-medium text-blue-800 dark:text-blue-300 mb-2">For Background Processing Functions:</h4>
+                                    <ul class="list-disc pl-5 text-sm text-gray-700 dark:text-gray-300">
+                                        <li>Set reserved concurrency to limit concurrent execution and protect downstream resources</li>
+                                        <li>Avoid provisioned concurrency unless predictable low latency is required</li>
+                                        <li>Use higher memory settings if processing time affects overall throughput</li>
+                                    </ul>
+                                </div>
+                                
+                                <div class="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg my-4 shadow-sm">
+                                    <h4 class="font-medium text-blue-800 dark:text-blue-300 mb-2">For Infrequently Used Functions:</h4>
+                                    <ul class="list-disc pl-5 text-sm text-gray-700 dark:text-gray-300">
+                                        <li>Keep default concurrency settings (no reserved or provisioned concurrency)</li>
+                                        <li>Optimize code for faster initialization to mitigate cold start impact</li>
+                                        <li>Consider using the Provisioned Concurrency API to provision capacity just before expected usage spikes</li>
+                                    </ul>
+                                </div>
+                                
+                                <p class="mt-4 text-gray-700 dark:text-gray-300">Remember that the optimal configuration depends on your specific workload, performance requirements, and budget constraints. Continuously monitor and adjust your settings based on real-world data and changing requirements.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Set up dark mode detection
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+            if (event.matches) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+            updateChart(); // Refresh chart colors when theme changes
+        });
+
+        // Different reference data for different workload types
+        const workloadData = {
+            // Compute-intensive: Major improvements with more memory/CPU
+            compute: [
+                { memory: 128, duration: 11.722, cost: 0.024628 },
+                { memory: 256, duration: 6.678, cost: 0.023035 },
+                { memory: 512, duration: 3.194, cost: 0.021830 },
+                { memory: 1024, duration: 1.865, cost: 0.021638 }, // Cost minimum
+                { memory: 2048, duration: 1.232, cost: 0.022642 },
+                { memory: 4096, duration: 0.962, cost: 0.025377 },
+                { memory: 8192, duration: 0.823, cost: 0.032606 },
+                { memory: 10240, duration: 0.773, cost: 0.039842 }
+            ],
+            
+            // I/O-bound: Moderate improvements with more memory
+            io: [
+                { memory: 128, duration: 8.722, cost: 0.018357 },
+                { memory: 256, duration: 6.112, cost: 0.020373 },
+                { memory: 512, duration: 4.215, cost: 0.028172 },
+                { memory: 1024, duration: 3.425, cost: 0.039788 }, 
+                { memory: 2048, duration: 3.129, cost: 0.057453 },
+                { memory: 4096, duration: 2.998, cost: 0.079947 },
+                { memory: 8192, duration: 2.932, cost: 0.115835 },
+                { memory: 10240, duration: 2.912, cost: 0.150000 }
+            ],
+            
+            // Network-bound: Minimal improvements with more memory
+            network: [
+                { memory: 128, duration: 5.722, cost: 0.012041 },
+                { memory: 256, duration: 5.215, cost: 0.017383 },
+                { memory: 512, duration: 4.912, cost: 0.032832 },
+                { memory: 1024, duration: 4.732, cost: 0.054964 }, 
+                { memory: 2048, duration: 4.598, cost: 0.084437 },
+                { memory: 4096, duration: 4.522, cost: 0.120587 },
+                { memory: 8192, duration: 4.489, cost: 0.177342 },
+                { memory: 10240, duration: 4.472, cost: 0.220000 }
+            ]
+        };
+        
+        // Start with compute-intensive as default
+        let referenceData = workloadData.compute;
+
+        // DOM Elements
+        const memorySlider = document.getElementById('memorySlider');
+        const memoryValue = document.getElementById('memoryValue');
+        const durationValue = document.getElementById('durationValue');
+        const costValue = document.getElementById('costValue');
+        const coldStartValue = document.getElementById('coldStartValue');
+        const executionCostValue = document.getElementById('executionCostValue');
+        const concurrencyCostValue = document.getElementById('concurrencyCostValue');
+        const provisionedValue = document.getElementById('provisionedValue');
+        const invocationsSelect = document.getElementById('invocationsSelect');
+        const lambdaVisualization = document.getElementById('lambdaVisualization');
+        const coldStartBar = document.getElementById('coldStartBar');
+        const warmStartBar = document.getElementById('warmStartBar');
+        const coldStartPercent = document.getElementById('coldStartPercent');
+        const warmStartPercent = document.getElementById('warmStartPercent');
+        const avgResponseTime = document.getElementById('avgResponseTime');
+        const coldStartImpact = document.getElementById('coldStartImpact');
+
+        // Chart setup
+        let metricsChart;
+        let coldWarmPieChart;
+        const ctx = document.getElementById('metricsChart').getContext('2d');
+        
+        function initChart() {
+            const isDarkMode = document.documentElement.classList.contains('dark');
+            const textColor = isDarkMode ? '#e5e7eb' : '#374151';
+            const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+            
+            metricsChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: referenceData.map(d => d.memory + ' MB'),
+                    datasets: [
+                        {
+                            label: 'Duration (seconds)',
+                            data: referenceData.map(d => d.duration),
+                            borderColor: '#5D5CDE',
+                            backgroundColor: 'rgba(93, 92, 222, 0.1)',
+                            tension: 0.4,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Cost ($)',
+                            data: referenceData.map(d => d.cost),
+                            borderColor: '#22c55e',
+                            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                            tension: 0.4,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Memory Allocation',
+                                color: textColor
+                            },
+                            grid: {
+                                color: gridColor
+                            },
+                            ticks: {
+                                color: textColor
+                            }
+                        },
+                        y: {
+                            type: 'logarithmic',
+                            title: {
+                                display: true,
+                                text: 'Duration (s)',
+                                color: textColor
+                            },
+                            position: 'left',
+                            min: 0.1,
+                            grid: {
+                                color: gridColor
+                            },
+                            ticks: {
+                                color: textColor
+                            }
+                        },
+                        y1: {
+                            title: {
+                                display: true,
+                                text: 'Cost ($)',
+                                color: textColor
+                            },
+                            position: 'right',
+                            min: 0.02,
+                            max: 0.04,
+                            grid: {
+                                drawOnChartArea: false,
+                                color: gridColor
+                            },
+                            ticks: {
+                                color: textColor
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += context.dataset.label.includes('Cost') 
+                                            ? '$' + context.parsed.y.toFixed(4)
+                                            : context.parsed.y.toFixed(2) + 's';
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updateChart() {
+            const isDarkMode = document.documentElement.classList.contains('dark');
+            const textColor = isDarkMode ? '#e5e7eb' : '#374151';
+            const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+            
+            if (metricsChart) {
+                // Only update chart theme colors
+                metricsChart.options.scales.x.title.color = textColor;
+                metricsChart.options.scales.x.ticks.color = textColor;
+                metricsChart.options.scales.x.grid.color = gridColor;
+                metricsChart.options.scales.y.title.color = textColor;
+                metricsChart.options.scales.y.ticks.color = textColor;
+                metricsChart.options.scales.y.grid.color = gridColor;
+                metricsChart.options.scales.y1.title.color = textColor;
+                metricsChart.options.scales.y1.ticks.color = textColor;
+                metricsChart.options.scales.y1.grid.color = gridColor;
+                metricsChart.update();
+            } else {
+                initChart();
+            }
+        }
+        
+        // Function to update the chart based on current selection
+        function updateChartMarker() {
+            if (!metricsChart) return;
+            
+            // Get current memory index from slider
+            const sliderIndex = parseInt(memorySlider.value);
+            
+            // Clear existing annotations
+            if (metricsChart.options.plugins.annotation) {
+                metricsChart.options.plugins.annotation.annotations = {};
+            } else {
+                metricsChart.options.plugins.annotation = {
+                    annotations: {}
+                };
+            }
+            
+            // Add point annotations for the current selection
+            metricsChart.options.plugins.annotation.annotations.costPoint = {
+                type: 'point',
+                xValue: sliderIndex,
+                yValue: referenceData[sliderIndex].cost,
+                backgroundColor: 'white',
+                borderColor: '#22c55e',
+                borderWidth: 2,
+                radius: 6,
+                yScaleID: 'y1'
+            };
+            
+            metricsChart.options.plugins.annotation.annotations.durationPoint = {
+                type: 'point',
+                xValue: sliderIndex,
+                yValue: referenceData[sliderIndex].duration,
+                backgroundColor: 'white',
+                borderColor: '#5D5CDE',
+                borderWidth: 2,
+                radius: 6,
+                yScaleID: 'y'
+            };
+            
+            metricsChart.update('none'); // Use 'none' for better performance during slider dragging
+        }
+        
+        // Calculate estimated values based on memory
+        function calculateMetrics(memory, invocations) {
+            // Find closest lower and higher memory reference points
+            let lowerRef = null;
+            let higherRef = null;
+            
+            for (const ref of referenceData) {
+                if (ref.memory <= memory && (!lowerRef || ref.memory > lowerRef.memory)) {
+                    lowerRef = ref;
+                }
+                if (ref.memory >= memory && (!higherRef || ref.memory < higherRef.memory)) {
+                    higherRef = ref;
+                }
+            }
+            
+            // Exact match
+            if (lowerRef && lowerRef.memory === memory) {
+                return {
+                    duration: lowerRef.duration,
+                    cost: lowerRef.cost * (invocations / 1000)
+                };
+            }
+            
+            // Interpolate between reference points
+            if (lowerRef && higherRef) {
+                const memoryRatio = (memory - lowerRef.memory) / (higherRef.memory - lowerRef.memory);
+                
+                // For duration, we use logarithmic interpolation since duration decreases non-linearly with memory
+                const logLowerDuration = Math.log(lowerRef.duration);
+                const logHigherDuration = Math.log(higherRef.duration);
+                const logDuration = logLowerDuration + memoryRatio * (logHigherDuration - logLowerDuration);
+                const duration = Math.exp(logDuration);
+                
+                // For cost, we use linear interpolation
+                const cost = lowerRef.cost + memoryRatio * (higherRef.cost - lowerRef.cost);
+                
+                return {
+                    duration: duration,
+                    cost: cost * (invocations / 1000)
+                };
+            }
+            
+            // Extrapolate if beyond our reference points
+            // This is a simplified model: duration ~ 1/memory
+            const baseRef = lowerRef || higherRef;
+            const memoryRatio = memory / baseRef.memory;
+            const duration = baseRef.duration / memoryRatio;
+            
+            // Cost calculation: GB-seconds * price per GB-second
+            // $0.0000166667 per GB-second from AWS pricing
+            const pricePerGBSecond = 0.0000166667;
+            const cost = (memory / 1024) * duration * invocations * pricePerGBSecond;
+            
+            return { duration, cost };
+        }
+        
+        // Calculate cold start time based on memory and workload type
+        function calculateColdStartTime(memory, workloadType) {
+            // Define base cold start times for different workload types (in ms)
+            const baseColdStartTimes = {
+                compute: 300, // Higher for compute due to startup requirements
+                io: 180,      // Medium for I/O workloads
+                network: 150  // Lower for network-bound functions
+            };
+            
+            // Additional factors based on memory
+            // Lower memory = slower initialization, higher memory = faster initialization
+            const baseTime = baseColdStartTimes[workloadType];
+            const memoryFactor = 128 / memory; // Inversely proportional to memory
+            
+            // Calculate cold start time (capped at a minimum based on workload type)
+            const minTime = {
+                compute: 80,
+                io: 60,
+                network: 50
+            };
+            
+            let coldStartTime = baseTime * Math.sqrt(memoryFactor);
+            return Math.max(coldStartTime, minTime[workloadType]);
+        }
+        
+        // Calculate costs including concurrency
+        function calculateConcurrencyCosts(memory, duration, invocations, provisioned) {
+            const pricePerGBSecond = 0.0000166667; // $0.00001667 per GB-second (x86 architecture)
+            
+            // Get current slider index and memory settings
+            const sliderIndex = parseInt(memorySlider.value);
+            const currentMemory = referenceData[sliderIndex].memory;
+            const currentDuration = referenceData[sliderIndex].duration;
+            
+            // Calculate the execution cost based on the selected memory's reference data
+            // The reference costs in workloadData are based on 100K invocations
+            const baseCost = referenceData[sliderIndex].cost;
+            const invocationBasedCost = baseCost * (invocations / 100000);
+            
+            // Calculate provisioned concurrency cost (per month)
+            // Provisioned concurrency uses the same pricing as normal execution
+            const secondsInMonth = 30 * 24 * 60 * 60; // ~30 days in seconds
+            const provisionedGbSeconds = (currentMemory / 1024) * secondsInMonth * provisioned;
+            const provisionedCost = provisionedGbSeconds * pricePerGBSecond;
+            
+            // Calculate request cost - First 1M requests are free per month
+            const billableRequests = Math.max(0, invocations - 1000000);
+            const requestCost = (billableRequests / 1000000) * 0.20; // $0.20 per million requests
+            
+            // Add provisioned concurrency cost to the total execution cost
+            const totalCost = invocationBasedCost + provisionedCost + requestCost;
+            
+            return {
+                executionCost: invocationBasedCost,
+                concurrencyCost: provisionedCost,
+                requestCost: requestCost,
+                totalCost: totalCost
+            };
+        }
+        
+        // Update Lambda visualization
+        function updateLambdaVisualization(reserved, provisioned) {
+            lambdaVisualization.innerHTML = '';
+            
+            // Show exactly 10 lambda instances
+            const totalLambdas = 10;
+            const provisionedCount = provisioned;
+            
+            // Create grid of Lambda icons
+            for (let i = 0; i < totalLambdas; i++) {
+                const lambdaIcon = document.createElement('div');
+                lambdaIcon.textContent = 'λ';
+                lambdaIcon.classList.add('lambda-box');
+                
+                if (i < provisionedCount) {
+                    lambdaIcon.classList.add('lambda-provisioned');
+                    lambdaIcon.title = 'Provisioned Concurrency';
+                } else {
+                    if (document.documentElement.classList.contains('dark')) {
+                        lambdaIcon.classList.add('lambda-dark');
+                    } else {
+                        lambdaIcon.classList.add('lambda-normal');
+                    }
+                    lambdaIcon.title = 'On-demand Concurrency';
+                }
+                
+                lambdaVisualization.appendChild(lambdaIcon);
+            }
+        }
+        
+        // Helper function to safely destroy charts
+        function safeDestroyChart(chart) {
+            if (chart) {
+                try {
+                    chart.destroy();
+                } catch (err) {
+                    console.error(`Error destroying chart:`, err);
+                }
+                return null;
+            }
+            return null;
+        }
+        
+        // Helper function to completely recreate pie chart canvas
+        function recreatePieChartCanvas() {
+            try {
+                const pieChartContainer = document.getElementById('pieChartContainer');
+                if (!pieChartContainer) {
+                    throw new Error("Pie chart container not found");
+                }
+                
+                // Create an entirely new container and canvas
+                pieChartContainer.innerHTML = `
+                    <div style="height: 120px; width: 120px;">
+                        <canvas id="coldWarmPieChart"></canvas>
+                    </div>
+                `;
+                
+                return document.getElementById('coldWarmPieChart');
+            } catch (err) {
+                console.error("Error recreating pie chart canvas:", err);
+                // Find the chart section in a more robust way
+                try {
+                    const chartSection = document.querySelector('#coldStartPercent').closest('.p-3');
+                    if (chartSection) {
+                        chartSection.querySelector('.flex.justify-center.mb-2').innerHTML = `
+                            <div style="height: 120px; width: 120px;">
+                                <canvas id="coldWarmPieChart"></canvas>
+                            </div>
+                        `;
+                        return document.getElementById('coldWarmPieChart');
+                    }
+                } catch (innerErr) {
+                    console.error("Complete fallback error:", innerErr);
+                }
+                
+                return null;
+            }
+        }
+        
+        // Pie chart for cold vs warm starts initialization function
+        function initColdWarmPieChart(coldStartPercentage, warmStartPercentage) {
+            const canvas = document.getElementById('coldWarmPieChart');
+            if (!canvas) {
+                console.error("Cannot find canvas element for pie chart");
+                // Update percentages without chart
+                if (coldStartPercent && warmStartPercent) {
+                    coldStartPercent.textContent = `${Math.round(coldStartPercentage)}%`;
+                    warmStartPercent.textContent = `${Math.round(warmStartPercentage)}%`;
+                }
+                return null;
+            }
+            
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                console.error("Cannot get 2D context for pie chart");
+                return null;
+            }
+            
+            const isDarkMode = document.documentElement.classList.contains('dark');
+            const textColor = isDarkMode ? '#e5e7eb' : '#374151';
+            
+            try {
+                const newChart = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: ['Cold Starts', 'Warm Starts'],
+                        datasets: [{
+                            data: [coldStartPercentage, warmStartPercentage],
+                            backgroundColor: ['#ef4444', '#22c55e'],
+                            borderColor: isDarkMode ? '#1f2937' : '#ffffff',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `${context.label}: ${context.raw}%`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                return newChart;
+            } catch (err) {
+                console.error("Error creating pie chart:", err);
+                return null;
+            }
+        }
+        
+        // Update cold start vs warm start visualization
+        function updateColdStartVisualization(provisioned, invocations, workloadType, memory) {
+            // Make provisioned concurrency have a much more dramatic effect on cold vs. warm starts
+            // When any provisioned concurrency is set, most requests should be warm
+            
+            let coldStartPercentage, warmStartPercentage;
+            
+            if (provisioned === 0) {
+                // With no provisioned concurrency, almost all invocations are cold starts
+                coldStartPercentage = 100;
+                warmStartPercentage = 0;
+            } else if (provisioned >= 10) {
+                // With 10 or more provisioned concurrency, almost all invocations are warm
+                coldStartPercentage = 0;
+                warmStartPercentage = 100;
+            } else {
+                // Scale linearly between 0 and 10 provisioned concurrency
+                // This makes the impact of provisioned concurrency very obvious
+                coldStartPercentage = 100 - (provisioned * 10);
+                warmStartPercentage = provisioned * 10;
+            }
+            
+            // Update text percentage values
+            if (coldStartPercent && warmStartPercent) {
+                coldStartPercent.textContent = `${Math.round(coldStartPercentage)}%`;
+                warmStartPercent.textContent = `${Math.round(warmStartPercentage)}%`;
+            }
+            
+            // Get the current duration and cold start time
+            const sliderIndex = parseInt(memorySlider.value);
+            const duration = referenceData[sliderIndex].duration;
+            
+            // Calculate cold start time
+            const coldStartMs = calculateColdStartTime(referenceData[sliderIndex].memory, workloadType);
+            
+            // Calculate the average response time including cold start impact
+            const coldStartSec = coldStartMs / 1000;
+            const coldStartImpactTotal = (coldStartPercentage / 100) * coldStartSec;
+            const totalAvgResponse = duration + coldStartImpactTotal;
+            
+            // Update the cold vs warm pie chart
+            if (coldWarmPieChart) {
+                try {
+                    coldWarmPieChart.data.datasets[0].data = [coldStartPercentage, warmStartPercentage];
+                    coldWarmPieChart.update();
+                } catch (err) {
+                    console.error("Error updating existing pie chart, recreating:", err);
+                    coldWarmPieChart = safeDestroyChart(coldWarmPieChart);
+                    const newCanvas = recreatePieChartCanvas();
+                    if (newCanvas) {
+                        coldWarmPieChart = initColdWarmPieChart(coldStartPercentage, warmStartPercentage);
+                    }
+                }
+            } else {
+                const canvas = document.getElementById('coldWarmPieChart');
+                if (!canvas) {
+                    const newCanvas = recreatePieChartCanvas();
+                    if (newCanvas) {
+                        coldWarmPieChart = initColdWarmPieChart(coldStartPercentage, warmStartPercentage);
+                    }
+                } else {
+                    coldWarmPieChart = initColdWarmPieChart(coldStartPercentage, warmStartPercentage);
+                }
+            }
+            
+            // Update the UI
+            if (avgResponseTime) avgResponseTime.textContent = `${totalAvgResponse.toFixed(2)}s`;
+            if (coldStartImpact) coldStartImpact.textContent = `${Math.round(coldStartMs)}ms`;
+        }
+        
+        // Update execution time breakdown
+        function updateExecutionTimeBreakdown(provisioned, workloadType, sliderIndex) {
+            const memory = referenceData[sliderIndex].memory;
+            const duration = referenceData[sliderIndex].duration;
+            const coldStartMs = calculateColdStartTime(memory, workloadType);
+            
+            // Calculate init time (as a percentage of total time)
+            let initTime = coldStartMs / 1000; // convert to seconds
+            
+            // Make initialization time more prominent for visual clarity
+            // When provisioned concurrency is 0, show higher initialization proportion
+            let initTimePercentage, executionTimePercentage;
+            
+            if (provisioned === 0) {
+                // With no provisioned concurrency, show higher initialization overhead
+                // Fixed higher percentage to make the effect visually obvious
+                initTimePercentage = 40; // 40% of the bar for initialization when no provisioned concurrency
+                executionTimePercentage = 60;
+                
+                // Adjust the displayed initialization time to match the visualization
+                const effectiveInitTime = (initTimePercentage / 100) * duration;
+                document.getElementById('initTimeValue').textContent = `${Math.round(coldStartMs)}ms`;
+                document.getElementById('execTimeValue').textContent = `${duration.toFixed(2)}s`;
+            } else if (provisioned >= 10) {
+                // With high provisioned concurrency, almost no initialization time
+                initTimePercentage = 1; // Minimum 1% to keep visible
+                executionTimePercentage = 99;
+                document.getElementById('initTimeValue').textContent = `0ms`;
+                document.getElementById('execTimeValue').textContent = `${duration.toFixed(2)}s`;
+            } else {
+                // Scale linearly between 0 and 10 provisioned concurrency
+                initTimePercentage = 40 - (provisioned * 4); // 40% → 0% as provisioned goes from 0 → 10
+                executionTimePercentage = 100 - initTimePercentage;
+                
+                // Calculate a visually appropriate initialization time
+                const scaledInitTime = (coldStartMs * (1 - (provisioned / 10))).toFixed(0);
+                document.getElementById('initTimeValue').textContent = `${scaledInitTime}ms`;
+                document.getElementById('execTimeValue').textContent = `${duration.toFixed(2)}s`;
+            }
+            
+            // Update bar widths with transition
+            document.getElementById('initTimeBar').style.width = `${initTimePercentage}%`;
+            document.getElementById('executionTimeBar').style.width = `${executionTimePercentage}%`;
+        }
+        
+        // Update UI with complete metrics
+        function updateCompleteMetrics() {
+            // Get values from inputs
+            const sliderIndex = parseInt(memorySlider.value);
+            const memory = referenceData[sliderIndex].memory;
+            const duration = referenceData[sliderIndex].duration;
+            const workloadType = workloadSelect.value;
+            const invocations = parseInt(invocationsSelect.value);
+            // Get provisioned value from the active button
+            const activeBtn = document.querySelector('.provisioned-btn.bg-\\[\\#5D5CDE\\]');
+            const provisioned = activeBtn ? parseInt(activeBtn.getAttribute('data-value')) : 0;
+            
+            // Update memory display
+            memoryValue.textContent = memory.toLocaleString();
+            
+            // Calculate cold start time based on memory and workload
+            const coldStartMs = calculateColdStartTime(memory, workloadType);
+            
+            // Calculate costs including concurrency costs
+            const costs = calculateConcurrencyCosts(memory, duration, invocations, provisioned);
+            
+            // Apply animation to highlight changes
+            const highlights = [durationValue, costValue, coldStartValue, executionCostValue, concurrencyCostValue];
+            highlights.forEach(el => {
+                if (el) {
+                    el.classList.add('highlight');
+                    setTimeout(() => el.classList.remove('highlight'), 800);
+                }
+            });
+            
+            // Update UI values
+            if (durationValue) durationValue.textContent = duration.toFixed(2) + 's';
+            if (coldStartValue) coldStartValue.textContent = Math.round(coldStartMs) + 'ms';
+            
+            // Format costs with appropriate decimal places based on the value
+            if (costValue) {
+                if (costs.totalCost < 0.01) {
+                    costValue.textContent = '$' + costs.totalCost.toFixed(4);
+                } else if (costs.totalCost < 0.1) {
+                    costValue.textContent = '$' + costs.totalCost.toFixed(3);
+                } else {
+                    costValue.textContent = '$' + costs.totalCost.toFixed(2);
+                }
+            }
+            
+            // Format component costs with appropriate decimal places
+            if (executionCostValue) {
+                if (costs.executionCost < 0.01) {
+                    executionCostValue.textContent = '$' + costs.executionCost.toFixed(4);
+                } else if (costs.executionCost < 0.1) {
+                    executionCostValue.textContent = '$' + costs.executionCost.toFixed(3);
+                } else {
+                    executionCostValue.textContent = '$' + costs.executionCost.toFixed(2);
+                }
+            }
+            
+            if (concurrencyCostValue) {
+                if (costs.concurrencyCost < 0.01) {
+                    concurrencyCostValue.textContent = '$' + costs.concurrencyCost.toFixed(4);
+                } else if (costs.concurrencyCost < 0.1) {
+                    concurrencyCostValue.textContent = '$' + costs.concurrencyCost.toFixed(3);
+                } else {
+                    concurrencyCostValue.textContent = '$' + costs.concurrencyCost.toFixed(2);
+                }
+            }
+            
+            // Update cost breakdown bars
+            const totalCost = costs.executionCost + costs.concurrencyCost;
+            if (totalCost > 0) {
+                const executionPct = Math.max(1, Math.min(99, (costs.executionCost / totalCost) * 100));
+                const concurrencyPct = 100 - executionPct;
+                
+                const executionBar = document.getElementById('executionCostBar');
+                const concurrencyBar = document.getElementById('concurrencyCostBar');
+                
+                if (executionBar) executionBar.style.width = `${executionPct}%`;
+                if (concurrencyBar) concurrencyBar.style.width = `${concurrencyPct}%`;
+            } else {
+                // Default if there's no cost
+                const executionBar = document.getElementById('executionCostBar');
+                const concurrencyBar = document.getElementById('concurrencyCostBar');
+                
+                if (executionBar) executionBar.style.width = '100%';
+                if (concurrencyBar) concurrencyBar.style.width = '0%';
+            }
+            
+            // Update chart markers
+            updateChartMarker();
+            
+            // Update Lambda visualizations
+            updateLambdaVisualization(0, provisioned);
+            updateColdStartVisualization(provisioned, invocations, workloadType, memory);
+        }
+        
+        // Function to change workload type
+        function changeWorkloadType() {
+            try {
+                const workloadType = workloadSelect.value;
+                
+                // Reset slider to 0
+                memorySlider.value = 0;
+                
+                // First destroy charts
+                metricsChart = safeDestroyChart(metricsChart);
+                coldWarmPieChart = safeDestroyChart(coldWarmPieChart);
+                
+                // Force recreation of the pie chart canvas
+                recreatePieChartCanvas();
+                
+                // Update reference data
+                referenceData = workloadData[workloadType];
+                
+                // Reset any active buttons for provisioned concurrency to default (0)
+                provisionedButtons.forEach(btn => {
+                    btn.classList.remove('bg-[#5D5CDE]', 'text-white');
+                });
+                document.querySelector('.provisioned-btn[data-value="0"]').classList.add('bg-[#5D5CDE]', 'text-white');
+                provisionedValue.textContent = "0";
+                
+                // Determine appropriate y-axis scales based on workload type
+                const maxDuration = Math.max(...referenceData.map(d => d.duration));
+                const minDuration = Math.min(...referenceData.map(d => d.duration));
+                const maxCost = Math.max(...referenceData.map(d => d.cost));
+                const minCost = Math.min(...referenceData.map(d => d.cost));
+                
+                // Set safe cost range with proper padding (0.01 below min, 0.05 above max)
+                const costMin = Math.max(0.01, minCost - 0.01);
+                const costMax = maxCost + 0.05;
+                
+                // Update memory display (memory at index 0)
+                memoryValue.textContent = referenceData[0].memory.toLocaleString();
+                
+                // Do initial reset of visualizations
+                updateLambdaVisualization(0, 0);
+                updateExecutionTimeBreakdown(0, workloadType, 0);
+                
+                // Create main chart with a delay to ensure DOM is ready
+                setTimeout(() => {
+                    try {
+                        const isDarkMode = document.documentElement.classList.contains('dark');
+                        const textColor = isDarkMode ? '#e5e7eb' : '#374151';
+                        const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+                        
+                        // Create new main metrics chart
+                        const metricsCanvas = document.getElementById('metricsChart');
+                        if (!metricsCanvas) {
+                            throw new Error("Metrics chart canvas not found");
+                        }
+                        
+                        const ctx = metricsCanvas.getContext('2d');
+                        if (!ctx) {
+                            throw new Error("Could not get 2D context for metrics chart");
+                        }
+                        
+                        metricsChart = new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: referenceData.map(d => d.memory + ' MB'),
+                                datasets: [
+                                    {
+                                        label: 'Duration (seconds)',
+                                        data: referenceData.map(d => d.duration),
+                                        borderColor: '#5D5CDE',
+                                        backgroundColor: 'rgba(93, 92, 222, 0.1)',
+                                        tension: 0.4,
+                                        yAxisID: 'y'
+                                    },
+                                    {
+                                        label: 'Cost ($)',
+                                        data: referenceData.map(d => d.cost),
+                                        borderColor: '#22c55e',
+                                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                                        tension: 0.4,
+                                        yAxisID: 'y1'
+                                    }
+                                ]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                interaction: {
+                                    mode: 'index',
+                                    intersect: false,
+                                },
+                                scales: {
+                                    x: {
+                                        title: {
+                                            display: true,
+                                            text: 'Memory Allocation',
+                                            color: textColor
+                                        },
+                                        grid: {
+                                            color: gridColor
+                                        },
+                                        ticks: {
+                                            color: textColor
+                                        }
+                                    },
+                                    y: {
+                                        type: 'logarithmic',
+                                        title: {
+                                            display: true,
+                                            text: 'Duration (s)',
+                                            color: textColor
+                                        },
+                                        position: 'left',
+                                        min: minDuration * 0.8, // Give some padding below the minimum
+                                        grid: {
+                                            color: gridColor
+                                        },
+                                        ticks: {
+                                            color: textColor
+                                        }
+                                    },
+                                    y1: {
+                                        type: 'linear', // Changed from logarithmic to linear for better handling
+                                        title: {
+                                            display: true,
+                                            text: 'Cost ($)',
+                                            color: textColor
+                                        },
+                                        position: 'right',
+                                        min: costMin,
+                                        max: costMax,
+                                        grid: {
+                                            drawOnChartArea: false,
+                                            color: gridColor
+                                        },
+                                        ticks: {
+                                            color: textColor,
+                                            // Format ticks to have appropriate decimal places
+                                            callback: function(value) {
+                                                return '$' + value.toFixed(2);
+                                            }
+                                        }
+                                    }
+                                },
+                                plugins: {
+                                    tooltip: {
+                                        callbacks: {
+                                            label: function(context) {
+                                                let label = context.dataset.label || '';
+                                                if (label) {
+                                                    label += ': ';
+                                                }
+                                                if (context.parsed.y !== null) {
+                                                    label += context.dataset.label.includes('Cost') 
+                                                        ? '$' + context.parsed.y.toFixed(4)
+                                                        : context.parsed.y.toFixed(2) + 's';
+                                                }
+                                                return label;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                        
+                        // Update chart markers
+                        updateChartMarker();
+                        
+                        // Initialize pie chart
+                        setTimeout(() => {
+                            try {
+                                coldWarmPieChart = initColdWarmPieChart(100, 0);
+                                
+                                // Update visualizations with current data
+                                updateLambdaVisualization(0, 0);
+                                updateColdStartVisualization(0, parseInt(invocationsSelect.value), workloadType, referenceData[0].memory);
+                                
+                                // Final update of all metrics
+                                updateCompleteMetrics();
+                            } catch (pieErr) {
+                                console.error("Error creating pie chart:", pieErr);
+                                // If pie chart creation fails, ensure metrics are still up to date
+                                updateCompleteMetrics();
+                            }
+                        }, 100);
+                        
+                    } catch (err) {
+                        console.error("Error creating main chart:", err);
+                        // Display fallback message in chart area
+                        const chartCanvas = document.getElementById('metricsChart');
+                        if (chartCanvas && chartCanvas.parentElement) {
+                            chartCanvas.parentElement.innerHTML = `
+                                <div class="flex items-center justify-center h-full bg-gray-100 dark:bg-gray-700 rounded-lg p-4">
+                                    <p class="text-center text-gray-700 dark:text-gray-300">
+                                        Unable to display chart for this workload type. The metrics are still being calculated correctly.
+                                    </p>
+                                </div>
+                            `;
+                        }
+                        
+                        // Try to create pie chart even if main chart failed
+                        setTimeout(() => {
+                            try {
+                                coldWarmPieChart = initColdWarmPieChart(100, 0);
+                            } catch (pieErr) {
+                                console.error("Error creating pie chart after main chart failure:", pieErr);
+                            }
+                            
+                            // Ensure metrics are still updated
+                            updateCompleteMetrics();
+                        }, 100);
+                    }
+                }, 200);
+            } catch (err) {
+                console.error("Error in changeWorkloadType:", err);
+            }
+        }
+        
+        // Setup tab handlers (explanation tabs)
+        function setupExplanationTabHandlers() {
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const tabContents = document.querySelectorAll('.tab-content');
+            
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    // Remove active state from all tabs
+                    tabButtons.forEach(btn => {
+                        btn.classList.remove('active', 'border-[#5D5CDE]');
+                        btn.classList.add('border-transparent');
+                    });
+                    
+                    // Hide all tab contents
+                    tabContents.forEach(content => {
+                        content.classList.add('hidden');
+                        content.classList.remove('block');
+                    });
+                    
+                    // Set active state on clicked tab
+                    button.classList.add('active', 'border-[#5D5CDE]');
+                    button.classList.remove('border-transparent');
+                    
+                    // Show corresponding tab content
+                    const tabId = button.getAttribute('data-tab');
+                    const tabContent = document.getElementById(tabId);
+                    if (tabContent) {
+                        tabContent.classList.remove('hidden');
+                        tabContent.classList.add('block');
+                    }
+                });
+            });
+        }
+        
+        // Setup main tabs
+        function setupMainTabHandlers() {
+            const mainTabButtons = document.querySelectorAll('.main-tab');
+            const mainTabContents = document.querySelectorAll('.main-tab-content');
+            
+            mainTabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    // Remove active state from all tabs
+                    mainTabButtons.forEach(btn => {
+                        btn.classList.remove('active', 'border-[#5D5CDE]');
+                        btn.classList.add('border-transparent');
+                    });
+                    
+                    // Hide all tab contents
+                    mainTabContents.forEach(content => {
+                        content.classList.add('hidden');
+                        content.classList.remove('block');
+                    });
+                    
+                    // Set active state on clicked tab
+                    button.classList.add('active', 'border-[#5D5CDE]');
+                    button.classList.remove('border-transparent');
+                    
+                    // Show corresponding tab content
+                    const tabId = button.getAttribute('data-tab');
+                    const tabContent = document.getElementById(tabId);
+                    if (tabContent) {
+                        tabContent.classList.remove('hidden');
+                        tabContent.classList.add('block');
+                    }
+                });
+            });
+        }
+        
+        // Event listeners
+        memorySlider.addEventListener('input', updateCompleteMetrics);
+        
+        // Make sure slider animation is smooth by using requestAnimationFrame
+        let animationFrame;
+        memorySlider.addEventListener('input', () => {
+            if (animationFrame) {
+                cancelAnimationFrame(animationFrame);
+            }
+            animationFrame = requestAnimationFrame(updateChartMarker);
+        });
+        
+        workloadSelect.addEventListener('change', () => {
+            changeWorkloadType();
+        });
+        
+        invocationsSelect.addEventListener('change', updateCompleteMetrics);
+        
+        // Provisioned concurrency buttons
+        const provisionedButtons = document.querySelectorAll('.provisioned-btn');
+        provisionedButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                // Remove active class from all buttons
+                provisionedButtons.forEach(btn => {
+                    btn.classList.remove('bg-[#5D5CDE]', 'text-white');
+                });
+                
+                // Add active class to clicked button
+                button.classList.add('bg-[#5D5CDE]', 'text-white');
+                
+                // Update provisioned value
+                const value = button.getAttribute('data-value');
+                provisionedValue.textContent = value;
+                
+                // Update metrics
+                updateCompleteMetrics();
+                updateExecutionTimeBreakdown(parseInt(value), workloadSelect.value, parseInt(memorySlider.value));
+            });
+        });
+        
+        // Initialize
+        setupExplanationTabHandlers();
+        setupMainTabHandlers();
+        initChart();
+        updateChartMarker();
+        
+        // Set initial active button
+        document.querySelector('.provisioned-btn[data-value="0"]').classList.add('bg-[#5D5CDE]', 'text-white');
+        
+        updateLambdaVisualization(0, 0);
+        updateColdStartVisualization(0, 100000, 'compute', 128);
+        updateExecutionTimeBreakdown(0, 'compute', 0);
+        updateCompleteMetrics();
+        
+        // Handle dark mode changes for Lambda visualization
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+            const activeBtn = document.querySelector('.provisioned-btn.bg-\\[\\#5D5CDE\\]');
+            const provisioned = activeBtn ? parseInt(activeBtn.getAttribute('data-value')) : 0;
+            updateLambdaVisualization(0, provisioned);
+        });
+    </script>
+</body>
+</html>
