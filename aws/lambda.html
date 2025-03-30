@@ -194,7 +194,7 @@
                         </div>
 
                         <!-- First row of metrics -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div class="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg">
                                 <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Average Execution Duration</h3>
                                 <p id="durationValue" class="text-2xl font-bold mt-1">11.72s</p>
@@ -203,6 +203,10 @@
                                 <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Cold Start Time</h3>
                                 <p id="coldStartValue" class="text-2xl font-bold mt-1">0.0ms</p>
                             </div>
+                            <div class="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg">
+                                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Overall Lambda Latency</h3>
+                                <p id="overallLatencyValue" class="text-2xl font-bold mt-1">11.72s</p>
+                            </div>
                         </div>
                         
                         <!-- Second row of metrics -->
@@ -210,7 +214,16 @@
                             <div class="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg">
                                 <div class="flex justify-between items-center">
                                     <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Monthly Cost</h3>
-                                    <p id="costValue" class="text-2xl font-bold">$0.0246</p>
+                                    <div class="flex items-center gap-2">
+                                        <p id="costValue" class="text-2xl font-bold">$0.0246</p>
+                                        <button id="costInfoBtn" class="text-[#5D5CDE] hover:text-[#4a4ab5] text-lg" title="View cost calculation details">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5">
+                                                <circle cx="12" cy="12" r="10"></circle>
+                                                <path d="M12 8v4"></path>
+                                                <path d="M12 16h.01"></path>
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </div>
                                 
                                 <!-- Cost breakdown bar -->
@@ -228,6 +241,88 @@
                                             <div class="w-3 h-3 rounded-full bg-purple-500 mr-1"></div>
                                             <span>Provisioned Concurrency: <span id="concurrencyCostValue">$0.00</span></span>
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Cost Calculation Modal -->
+                        <div id="costModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+                            <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full mx-4 shadow-xl">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="text-xl font-semibold">Cost Calculation Details</h3>
+                                    <button id="closeModal" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                
+                                <div class="space-y-4">
+                                    <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                                        <h4 class="font-medium mb-2">Current Configuration</h4>
+                                        <div class="grid grid-cols-2 gap-2 text-sm">
+                                            <div class="text-gray-600 dark:text-gray-400">Memory:</div>
+                                            <div id="modalMemory" class="font-medium">128 MB</div>
+                                            
+                                            <div class="text-gray-600 dark:text-gray-400">Execution Time:</div>
+                                            <div id="modalDuration" class="font-medium">11.72s</div>
+                                            
+                                            <div class="text-gray-600 dark:text-gray-400">Provisioned Concurrency:</div>
+                                            <div id="modalConcurrency" class="font-medium">0</div>
+                                            
+                                            <div class="text-gray-600 dark:text-gray-400">Monthly Invocations:</div>
+                                            <div id="modalInvocations" class="font-medium">100,000</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                                        <h4 class="font-medium mb-2">Cost Breakdown</h4>
+                                        
+                                        <!-- Request Cost -->
+                                        <div class="mb-2">
+                                            <div class="flex justify-between items-center mb-1">
+                                                <span class="text-sm">Request Cost:</span>
+                                                <span id="modalRequestCost" class="text-sm font-medium">$0.00</span>
+                                            </div>
+                                            <div class="text-xs text-gray-500 dark:text-gray-400">
+                                                <span id="modalRequestCalc">First 1M requests are free, $0.20 per million after</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Execution Cost -->
+                                        <div class="mb-2">
+                                            <div class="flex justify-between items-center mb-1">
+                                                <span class="text-sm">Execution Cost:</span>
+                                                <span id="modalExecutionCost" class="text-sm font-medium">$0.0246</span>
+                                            </div>
+                                            <div class="text-xs text-gray-500 dark:text-gray-400">
+                                                <span id="modalExecutionCalc">128 MB × 11.72s × 100,000 invocations × $0.0000166667/GB-second</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Provisioned Concurrency Cost -->
+                                        <div class="mb-2">
+                                            <div class="flex justify-between items-center mb-1">
+                                                <span class="text-sm">Provisioned Concurrency Cost:</span>
+                                                <span id="modalConcurrencyCost" class="text-sm font-medium">$0.00</span>
+                                            </div>
+                                            <div class="text-xs text-gray-500 dark:text-gray-400">
+                                                <span id="modalConcurrencyCalc">0 units × 128 MB × 2,592,000s × $0.0000041667/GB-second</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Total -->
+                                        <div class="mt-4 pt-2 border-t border-gray-200 dark:border-gray-700">
+                                            <div class="flex justify-between items-center">
+                                                <span class="font-medium">Total Monthly Cost:</span>
+                                                <span id="modalTotalCost" class="font-bold text-[#5D5CDE]">$0.0246</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                                        <p>All costs are approximations based on AWS pricing as of 2023. Actual costs may vary.</p>
                                     </div>
                                 </div>
                             </div>
@@ -589,38 +684,38 @@
         const workloadData = {
             // Compute-intensive: Major improvements with more memory/CPU
             compute: [
-                { memory: 128, duration: 11.722, cost: 0.024628 },
-                { memory: 256, duration: 6.678, cost: 0.023035 },
-                { memory: 512, duration: 3.194, cost: 0.021830 },
-                { memory: 1024, duration: 1.865, cost: 0.021638 }, // Cost minimum
-                { memory: 2048, duration: 1.232, cost: 0.022642 },
-                { memory: 4096, duration: 0.962, cost: 0.025377 },
-                { memory: 8192, duration: 0.823, cost: 0.032606 },
-                { memory: 10240, duration: 0.773, cost: 0.039842 }
+                { memory: 128, duration: 2.344, cost: 0.024628 },
+                { memory: 256, duration: 1.336, cost: 0.023035 },
+                { memory: 512, duration: 0.639, cost: 0.021830 },
+                { memory: 1024, duration: 0.373, cost: 0.021638 }, // Cost minimum
+                { memory: 2048, duration: 0.246, cost: 0.022642 },
+                { memory: 4096, duration: 0.192, cost: 0.025377 },
+                { memory: 8192, duration: 0.165, cost: 0.032606 },
+                { memory: 10240, duration: 0.155, cost: 0.039842 }
             ],
             
             // I/O-bound: Moderate improvements with more memory
             io: [
-                { memory: 128, duration: 8.722, cost: 0.018357 },
-                { memory: 256, duration: 6.112, cost: 0.020373 },
-                { memory: 512, duration: 4.215, cost: 0.028172 },
-                { memory: 1024, duration: 3.425, cost: 0.039788 }, 
-                { memory: 2048, duration: 3.129, cost: 0.057453 },
-                { memory: 4096, duration: 2.998, cost: 0.079947 },
-                { memory: 8192, duration: 2.932, cost: 0.115835 },
-                { memory: 10240, duration: 2.912, cost: 0.150000 }
+                { memory: 128, duration: 1.744, cost: 0.018357 },
+                { memory: 256, duration: 1.222, cost: 0.020373 },
+                { memory: 512, duration: 0.843, cost: 0.028172 },
+                { memory: 1024, duration: 0.685, cost: 0.039788 }, 
+                { memory: 2048, duration: 0.626, cost: 0.057453 },
+                { memory: 4096, duration: 0.600, cost: 0.079947 },
+                { memory: 8192, duration: 0.586, cost: 0.115835 },
+                { memory: 10240, duration: 0.582, cost: 0.150000 }
             ],
             
             // Network-bound: Minimal improvements with more memory
             network: [
-                { memory: 128, duration: 5.722, cost: 0.012041 },
-                { memory: 256, duration: 5.215, cost: 0.017383 },
-                { memory: 512, duration: 4.912, cost: 0.032832 },
-                { memory: 1024, duration: 4.732, cost: 0.054964 }, 
-                { memory: 2048, duration: 4.598, cost: 0.084437 },
-                { memory: 4096, duration: 4.522, cost: 0.120587 },
-                { memory: 8192, duration: 4.489, cost: 0.177342 },
-                { memory: 10240, duration: 4.472, cost: 0.220000 }
+                { memory: 128, duration: 1.144, cost: 0.012041 },
+                { memory: 256, duration: 1.043, cost: 0.017383 },
+                { memory: 512, duration: 0.982, cost: 0.032832 },
+                { memory: 1024, duration: 0.946, cost: 0.054964 }, 
+                { memory: 2048, duration: 0.920, cost: 0.084437 },
+                { memory: 4096, duration: 0.904, cost: 0.120587 },
+                { memory: 8192, duration: 0.898, cost: 0.177342 },
+                { memory: 10240, duration: 0.894, cost: 0.220000 }
             ]
         };
         
@@ -1142,6 +1237,14 @@
             // Update the UI
             if (avgResponseTime) avgResponseTime.textContent = `${totalAvgResponse.toFixed(2)}s`;
             if (coldStartImpact) coldStartImpact.textContent = `${Math.round(coldStartMs)}ms`;
+            
+            // Update the overall latency display with animation
+            const overallLatencyValue = document.getElementById('overallLatencyValue');
+            if (overallLatencyValue) {
+                overallLatencyValue.textContent = `${totalAvgResponse.toFixed(2)}s`;
+                overallLatencyValue.classList.add('highlight');
+                setTimeout(() => overallLatencyValue.classList.remove('highlight'), 800);
+            }
         }
         
         // Update execution time breakdown
@@ -1622,6 +1725,91 @@
         updateExecutionTimeBreakdown(0, 'compute', 0);
         updateCompleteMetrics();
         
+        // Setup cost modal functionality
+        const costModal = document.getElementById('costModal');
+        const costInfoBtn = document.getElementById('costInfoBtn');
+        const closeModalBtn = document.getElementById('closeModal');
+        
+        // Open modal when clicking on info button
+        costInfoBtn.addEventListener('click', () => {
+            // Update modal content with current values
+            updateCostModalDetails();
+            costModal.classList.remove('hidden');
+        });
+        
+        // Close modal when clicking on close button
+        closeModalBtn.addEventListener('click', () => {
+            costModal.classList.add('hidden');
+        });
+        
+        // Close modal when clicking outside of it
+        costModal.addEventListener('click', (e) => {
+            if (e.target === costModal) {
+                costModal.classList.add('hidden');
+            }
+        });
+        
+        // Function to update cost modal details
+        function updateCostModalDetails() {
+            // Get current values
+            const sliderIndex = parseInt(memorySlider.value);
+            const memory = referenceData[sliderIndex].memory;
+            const duration = referenceData[sliderIndex].duration;
+            const invocations = parseInt(invocationsSelect.value);
+            
+            // Get provisioned value from the active button
+            const activeBtn = document.querySelector('.provisioned-btn.bg-\\[\\#5D5CDE\\]');
+            const provisioned = activeBtn ? parseInt(activeBtn.getAttribute('data-value')) : 0;
+            
+            // Calculate costs
+            const costs = calculateConcurrencyCosts(memory, duration, invocations, provisioned);
+            
+            // Update modal fields
+            document.getElementById('modalMemory').textContent = `${memory.toLocaleString()} MB`;
+            document.getElementById('modalDuration').textContent = `${duration.toFixed(2)}s`;
+            document.getElementById('modalConcurrency').textContent = provisioned;
+            document.getElementById('modalInvocations').textContent = invocations.toLocaleString();
+            
+            // Request cost
+            const billableRequests = Math.max(0, invocations - 1000000);
+            document.getElementById('modalRequestCost').textContent = formatCurrency(costs.requestCost);
+            
+            if (billableRequests > 0) {
+                document.getElementById('modalRequestCalc').textContent = 
+                    `First 1M requests free, ${billableRequests.toLocaleString()} billable requests × $0.20 per million`;
+            } else {
+                document.getElementById('modalRequestCalc').textContent = 
+                    `${invocations.toLocaleString()} requests (under free tier limit of 1M)`;
+            }
+            
+            // Execution cost
+            document.getElementById('modalExecutionCost').textContent = formatCurrency(costs.executionCost);
+            document.getElementById('modalExecutionCalc').textContent = 
+                `${memory} MB × ${duration.toFixed(2)}s × ${invocations.toLocaleString()} invocations × $0.0000166667/GB-second`;
+            
+            // Provisioned concurrency cost
+            document.getElementById('modalConcurrencyCost').textContent = formatCurrency(costs.concurrencyCost);
+            const secondsInMonth = 30 * 24 * 60 * 60;
+            document.getElementById('modalConcurrencyCalc').textContent = 
+                `${provisioned} units × ${memory} MB × ${secondsInMonth.toLocaleString()}s × $0.0000041667/GB-second`;
+            
+            // Total cost
+            document.getElementById('modalTotalCost').textContent = formatCurrency(costs.totalCost);
+        }
+        
+        // Helper function to format currency values
+        function formatCurrency(value) {
+            if (value < 0.01) {
+                return '$' + value.toFixed(4);
+            } else if (value < 0.1) {
+                return '$' + value.toFixed(3);
+            } else if (value < 1) {
+                return '$' + value.toFixed(2);
+            } else {
+                return '$' + value.toFixed(2);
+            }
+        }
+        
         // Handle dark mode changes for Lambda visualization
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
             const activeBtn = document.querySelector('.provisioned-btn.bg-\\[\\#5D5CDE\\]');
@@ -1631,4 +1819,3 @@
     </script>
 </body>
 </html>
-
