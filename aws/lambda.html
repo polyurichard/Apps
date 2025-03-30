@@ -474,10 +474,10 @@
                                     <li><strong>Compute costs:</strong> $0.0000166667 per GB-second (rounded to nearest 1ms)</li>
                                     <li><strong>Provisioned concurrency costs:</strong>
                                         <ul class="list-disc pl-5">
-                                            <li>Charged at the regular GB-second rate ($0.0000166667 per GB-second)</li>
+                                            <li>Charged at a rate of $0.0000041667 per GB-second</li>
                                             <li>Charged for the entire time concurrency is provisioned, regardless of usage</li>
                                             <li>Charged in 5-minute increments from the time concurrency is enabled until disabled</li>
-                                            <li>For a 1GB Lambda, maintaining one unit of provisioned concurrency can cost about $43.20 per month</li>
+                                            <li>For a 1GB Lambda, maintaining one unit of provisioned concurrency can cost about $10.80 per month</li>
                                         </ul>
                                     </li>
                                 </ol>
@@ -505,8 +505,8 @@
                                     <p class="text-sm text-gray-700 dark:text-gray-300">Consider a function with 1 million monthly invocations:</p>
                                     <ul class="list-disc pl-5 text-sm text-gray-700 dark:text-gray-300">
                                         <li>Standard execution: $0.20 (invocations) + compute costs based on memory/duration</li>
-                                        <li>With 10 units of provisioned concurrency at 1GB: ~$30/month in idle capacity costs + regular compute costs</li>
-                                        <li>The extra $30/month might be justified if cold starts are affecting user experience or business metrics</li>
+                                        <li>With 10 units of provisioned concurrency at 1GB: ~$10.80/month in idle capacity costs + regular compute costs</li>
+                                        <li>The extra $10.80/month might be justified if cold starts are affecting user experience or business metrics</li>
                                     </ul>
                                 </div>
                             </div>
@@ -918,7 +918,8 @@
             // Provisioned concurrency uses the same pricing as normal execution
             const secondsInMonth = 30 * 24 * 60 * 60; // ~30 days in seconds
             const provisionedGbSeconds = (currentMemory / 1024) * secondsInMonth * provisioned;
-            const provisionedCost = provisionedGbSeconds * pricePerGBSecond;
+            const provisionedPricePerGBSecond = 0.0000041667; // $0.0000041667 per GB-second for provisioned concurrency
+    const provisionedCost = provisionedGbSeconds * provisionedPricePerGBSecond;
             
             // Calculate request cost - First 1M requests are free per month
             const billableRequests = Math.max(0, invocations - 1000000);
@@ -1630,3 +1631,4 @@
     </script>
 </body>
 </html>
+
