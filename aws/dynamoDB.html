@@ -1892,16 +1892,33 @@ const shardNumber = hash(partitionKeyValue) % numberOfShards;
                 shards[hashValue].push(record);
             });
             
-            // Sort records within each shard if a sort key is selected
-            if (sortKeyField !== 'none') {
-                Object.keys(shards).forEach(shardKey => {
-                    shards[shardKey].sort((a, b) => {
-                        if (a[sortKeyField] < b[sortKeyField]) return -1;
-                        if (a[sortKeyField] > b[sortKeyField]) return 1;
-                        return 0;
-                    });
+            // Group and sort records within each shard
+            Object.keys(shards).forEach(shardKey => {
+                // Group records by partition key value
+                const groupedByPartitionKey = {};
+                
+                shards[shardKey].forEach(record => {
+                    const partitionKeyValue = record[partitionKeyField];
+                    if (!groupedByPartitionKey[partitionKeyValue]) {
+                        groupedByPartitionKey[partitionKeyValue] = [];
+                    }
+                    groupedByPartitionKey[partitionKeyValue].push(record);
                 });
-            }
+                
+                // Sort each group by sort key if one is selected
+                if (sortKeyField !== 'none') {
+                    Object.keys(groupedByPartitionKey).forEach(pkValue => {
+                        groupedByPartitionKey[pkValue].sort((a, b) => {
+                            if (a[sortKeyField] < b[sortKeyField]) return -1;
+                            if (a[sortKeyField] > b[sortKeyField]) return 1;
+                            return 0;
+                        });
+                    });
+                }
+                
+                // Flatten groups back into a single array for the shard
+                shards[shardKey] = Object.values(groupedByPartitionKey).flat();
+            });
             
             // Calculate distribution stats
             const shardSizes = Object.values(shards).map(shard => shard.length);
